@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>自動出席</title>
+  <style>
+    body {
+      width: 260px;
+      padding: 18px 14px 14px 14px;
+      background: linear-gradient(135deg, #e3f0ff 0%, #f8fbff 100%);
+      font-family: 'Segoe UI', 'Meiryo', sans-serif;
+    }
+    label {
+      color: #1565c0;
+      font-weight: bold;
+      margin-bottom: 4px;
+      display: block;
+    }
+    input {
+      width: 100%;
+      margin: 6px 0 14px 0;
+      padding: 7px 8px;
+      border: 1.5px solid #90caf9;
+      border-radius: 5px;
+      font-size: 15px;
+      background: #f4faff;
+      transition: border 0.2s;
+    }
+    input:focus {
+      border: 1.5px solid #1976d2;
+      outline: none;
+      background: #e3f2fd;
+    }
+    button {
+      width: 100%;
+      padding: 10px 0;
+      margin: 6px 0;
+      border: none;
+      border-radius: 5px;
+      font-size: 15px;
+      font-weight: bold;
+      color: #fff;
+      background: linear-gradient(90deg, #1976d2 60%, #64b5f6 100%);
+      box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      background: linear-gradient(90deg, #1565c0 60%, #42a5f5 100%);
+      box-shadow: 0 4px 16px rgba(25, 118, 210, 0.13);
+    }
+  </style>
+</head>
+<body>
+  <label for="nameInput">名前:</label>
+  <input type="text" id="nameInput" placeholder="名前を入力してください" />
+  <button id="save">名前を保存</button>
+  <button id="run">自動入力実行</button>
+  <script src="popup.js"></script>
+</body>
+</html>

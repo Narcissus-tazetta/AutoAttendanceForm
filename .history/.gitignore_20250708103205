@@ -1,0 +1,8 @@
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+
+# Chrome拡張の履歴やキャッシュ
+history/
