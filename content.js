@@ -141,12 +141,15 @@
     const runFormFiller = () => {
         if (!detectAttendanceForm()) return;
 
-        clickCheckboxes();
-
         chrome.storage.sync.get(["userName", "autoSubmit"], (result) => {
-            const userName = result.userName || "山田太郎";
+            const userName = result.userName;
             const autoSubmit = result.autoSubmit || false;
 
+            if (!userName || userName.trim() === "") {
+                return;
+            }
+
+            clickCheckboxes();
             fillInputs(userName);
 
             setTimeout(() => {
