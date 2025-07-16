@@ -3,7 +3,7 @@
     "name": "自動出席フォーム",
     "version": "1.0.0",
     "description": "Googleフォームの出席フォームを自動で入力・送信する拡張機能",
-    "permissions": ["activeTab", "scripting", "storage"],
+    "permissions": ["activeTab", "scripting", "storage", "tabs"],
     "host_permissions": ["https://docs.google.com/forms/*"],
     "background": {
         "service_worker": "background.js"
@@ -11,7 +11,7 @@
     "content_scripts": [
         {
             "matches": ["https://docs.google.com/forms/*"],
-            "js": ["content.js"]
+            "js": ["selectors.js", "content.js"]
         }
     ],
     "icons": {
