@@ -156,7 +156,9 @@
         }
     };
 
+
     const runFormFiller = () => {
+        if (window.location.href.includes('edit')) return;
         if (!detectAttendanceForm()) return;
 
         chrome.storage.sync.get(["userName", "autoSubmit"], (result) => {
