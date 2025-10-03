@@ -32,8 +32,10 @@
                 }
             }
         }
-        
-        const remainingSelectors = SELECTORS.checkboxSelectors.filter(s => !SELECTORS.priorityCheckboxSelectors.includes(s));
+
+        const remainingSelectors = SELECTORS.checkboxSelectors.filter(
+            (s) => !SELECTORS.priorityCheckboxSelectors.includes(s)
+        );
         for (const selector of remainingSelectors) {
             const elements = document.querySelectorAll(selector);
             for (const element of elements) {
@@ -65,8 +67,10 @@
                 }
             }
         }
-        
-        const remainingSelectors = SELECTORS.inputSelectors.filter(s => !SELECTORS.priorityInputSelectors.includes(s));
+
+        const remainingSelectors = SELECTORS.inputSelectors.filter(
+            (s) => !SELECTORS.priorityInputSelectors.includes(s)
+        );
         for (const selector of remainingSelectors) {
             const elements = document.querySelectorAll(selector);
             for (const input of elements) {
@@ -121,44 +125,42 @@
             if (submitButton && !submitButton.classList.contains("auto-submitted")) {
                 submitButton.click();
                 submitButton.classList.add("auto-submitted");
-                
+
                 let tabCloseTriggered = false;
-                
+
                 const checkForCompletion = () => {
                     setTimeout(() => {
                         for (const message of MESSAGES.completionMessages) {
                             if (document.body.innerText.includes(message) && !tabCloseTriggered) {
                                 tabCloseTriggered = true;
-                                chrome.runtime.sendMessage({action: 'closeTab'});
+                                chrome.runtime.sendMessage({ action: "closeTab" });
                                 return;
                             }
                         }
                     }, TIMINGS.completionCheck);
                 };
-                
-                window.addEventListener('beforeunload', () => {
+
+                window.addEventListener("beforeunload", () => {
                     if (!tabCloseTriggered) {
                         tabCloseTriggered = true;
-                        chrome.runtime.sendMessage({action: 'closeTab'});
+                        chrome.runtime.sendMessage({ action: "closeTab" });
                     }
                 });
-                
+
                 setTimeout(() => {
                     if (!tabCloseTriggered) {
                         tabCloseTriggered = true;
-                        chrome.runtime.sendMessage({action: 'closeTab'});
+                        chrome.runtime.sendMessage({ action: "closeTab" });
                     }
                 }, TIMINGS.tabCloseDelay);
-                
+
                 checkForCompletion();
                 break;
             }
         }
     };
-
-
     const runFormFiller = () => {
-        if (window.location.href.includes('edit')) return;
+        if (window.location.href.includes("edit")) return;
         if (!detectAttendanceForm()) return;
 
         chrome.storage.sync.get(["userName", "autoSubmit"], (result) => {

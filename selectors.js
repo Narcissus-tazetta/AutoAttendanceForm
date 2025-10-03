@@ -39,27 +39,18 @@ const SELECTORS = {
         '[aria-label*="Submit"]',
     ],
 
-    priorityCheckboxSelectors: [
-        "label.OLkl6c",
-        'div[role="checkbox"]',
-        'input[type="checkbox"]'
-    ],
+    priorityCheckboxSelectors: ["label.OLkl6c", 'div[role="checkbox"]', 'input[type="checkbox"]'],
 
     priorityInputSelectors: [
         "input.whsOnd.zHQkBf",
         'input[type="text"]',
         'input[aria-label*="名前"]',
-        'input[aria-label*="氏名"]'
-    ]
+        'input[aria-label*="氏名"]',
+    ],
 };
 
 const MESSAGES = {
-    completionMessages: [
-        "回答を記録しました",
-        "送信完了",
-        "ありがとうございました",
-        "Your response has been recorded"
-    ]
+    completionMessages: ["回答を記録しました", "送信完了", "ありがとうございました", "Your response has been recorded"],
 };
 
 const TIMINGS = {
@@ -67,5 +58,5 @@ const TIMINGS = {
     retryInterval: 500,
     tabCloseDelay: 3000,
     fallbackRun: 2000,
-    maxRetries: 2
+    maxRetries: 2,
 };
