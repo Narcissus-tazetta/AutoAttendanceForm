@@ -30,18 +30,14 @@ const App = () => {
                 }
                 setAutoSubmit(res && res.autoSubmit ? res.autoSubmit : false);
                 return;
-            } catch (e) {
-                // fallback
-            }
+            } catch (e) {}
 
             try {
                 const resLocal: any = await b.storage.local.get(["userName", "autoSubmit"]);
                 if (resLocal && resLocal.userName) setName(resLocal.userName);
                 setAutoSubmit(resLocal && resLocal.autoSubmit ? resLocal.autoSubmit : false);
                 return;
-            } catch (e) {
-                // fallback
-            }
+            } catch (e) {}
 
             try {
                 const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
@@ -49,9 +45,7 @@ const App = () => {
                     if (resMsg.userName) setName(resMsg.userName);
                     setAutoSubmit(resMsg.autoSubmit || false);
                 }
-            } catch (e) {
-                // nothing
-            }
+            } catch (e) {}
         })();
     }, []);
 

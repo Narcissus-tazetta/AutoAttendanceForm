@@ -37,8 +37,6 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         console.debug("[AAF] detectAttendanceForm: titleContainsToken=true");
         return hasSubmit();
     }
-
-    // try waiting a short time for dynamic content (e.g. SPA load)
     try {
         console.debug("[AAF] detectAttendanceForm: waiting for text match");
         const found = await waitForTextMatch(["出席フォーム"], TIMINGS.completionCheck * 6);
@@ -162,7 +160,6 @@ const checkCompletion = (): { allChecked: boolean; namesFilled: boolean } => {
     return { allChecked, namesFilled };
 };
 
-// use sharedFindSubmitButtons by default
 const findSubmitButtons = (scope: ParentNode = document): Element[] => sharedFindSubmitButtons(scope);
 
 const submitForm = (): void => {

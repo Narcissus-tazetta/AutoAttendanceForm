@@ -10,7 +10,7 @@
         "build:fonts": "node scripts/convert-fonts.js",
         "build:css": "tailwindcss -i src/popup.css -o build/popup.css --minify",
         "build:all": "bun run build:fonts && bun run build:css && bun run build:chrome",
-        "package:chrome": "bun run build:chrome && cd dist && zip -r ../build/chrome.zip .",
+        "package:chrome": "bun run build:chrome && cd dist/chrome && zip -r \"../../build/自動出席フォーム chrome.zip\" .",
         "package:firefox": "bun run build:firefox && web-ext build --source-dir=dist --artifacts-dir=build",
         "lint": "eslint src/**/*.ts",
         "typecheck": "tsc --noEmit"

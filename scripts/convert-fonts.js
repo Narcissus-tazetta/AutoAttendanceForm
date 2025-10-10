@@ -41,11 +41,9 @@ async function copyFonts() {
             const outPath = path.join(outDir, outName);
             const ok = convertTtfToWoff2(src, outPath);
             if (!ok) {
-                // fallback: copy ttf
                 await fse.copy(src, path.join(outDir, name));
             }
         } else if (stat.isDirectory()) {
-            // copy extras
             await fse.copy(src, path.join(outDir, name));
         }
     }

@@ -93,9 +93,6 @@ async function build(target = "chrome") {
         minify: false,
         legalComments: "none",
     });
-
-    // If esbuild emitted the background into a nested folder (e.g. firefox/background.js),
-    // move it to outDir/background.js so manifest paths match.
     try {
         const rel = path.relative(src, backgroundEntry);
         const subdir = path.dirname(rel);
@@ -107,9 +104,7 @@ async function build(target = "chrome") {
                 await fse.remove(path.join(outDir, subdir));
             }
         }
-    } catch (e) {
-        // ignore
-    }
+    } catch (e) {}
 
     await copyStaticFiles(target, outDir);
 
@@ -132,11 +127,9 @@ async function build(target = "chrome") {
     if (target === "firefox") {
         try {
             const { spawnSync } = require("child_process");
-            // create a simple zip of the dist firefox folder for convenience
-            const zipPath = path.join(buildDir, "firefox.zip");
+            const zipPath = path.join(buildDir, "自動出席フォーム firefox.zip");
             const zipRes = spawnSync("zip", ["-r", zipPath, "."], { cwd: outDir, stdio: "inherit" });
             if (zipRes.error) {
-                // zip command may not be available on all systems; ignore silently
             }
         } catch (e) {}
     }
