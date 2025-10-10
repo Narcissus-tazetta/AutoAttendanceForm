@@ -1,0 +1,11 @@
+{
+    "background": {
+        "scripts": ["background.js"]
+    },
+    "permissions": ["storage", "tabs"],
+    "applications": {
+        "gecko": {
+            "id": "auto-attendance-form@example.com"
+        }
+    }
+}

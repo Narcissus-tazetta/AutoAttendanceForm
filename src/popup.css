@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.popup-root { @apply bg-[#e0f7fa] rounded-lg p-3 font-sans; }
+.popup-root { width: 320px }
+
+@font-face {
+	font-family: 'PlaywriteDE SAS';
+	src: url('/Playwrite_DE_SAS/PlaywriteDESAS-VariableFont_wght.woff2') format('woff2'), url('/Playwrite_DE_SAS/PlaywriteDESAS-VariableFont_wght.ttf') format('truetype');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+.font-playwrite { font-family: 'PlaywriteDE SAS', system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'メイリオ', 'Noto Sans JP', sans-serif }
+
+.save-button { @apply w-full mt-2 py-2 rounded-md text-white }
+.save-button { transition: background 160ms ease, transform 120ms ease; background: #2196f3 }
+.save-button:hover { background: #1976d2 }
+.save-button:active { transform: translateY(0) }
+
+.help-button { @apply inline-flex items-center justify-center rounded-full border px-0 }
+.help-button { width: 18px; height: 18px }
+.help-button:focus { outline: 2px solid rgba(37,99,235,0.2) }
+
+.switch-btn { @apply rounded-full p-0 flex items-center }
+.switch-circle { @apply block bg-white rounded-full shadow }
