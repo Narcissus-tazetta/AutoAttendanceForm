@@ -3,9 +3,9 @@
         "scripts": ["background.js"]
     },
     "permissions": ["storage", "tabs"],
-    "applications": {
+    "browser_specific_settings": {
         "gecko": {
-            "id": "auto-attendance-form@example.com"
+            "id": "auto-attendance-form@narcissus-tazetta.github.io"
         }
     }
 }

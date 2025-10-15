@@ -8,13 +8,36 @@ const distRoot = path.join(root, "dist");
 const buildDir = path.join(root, "build");
 
 function mergeManifest(target) {
+    // manifest.common.jsonをベースに、chrome/firefox用差分をマージ
     const common = fse.readJsonSync(path.join(root, "manifest.common.json"));
     const specificPath = path.join(root, `manifest.${target}.json`);
-    let specific = {};
+    let merged = { ...common };
     if (fse.existsSync(specificPath)) {
-        specific = fse.readJsonSync(specificPath);
+        const specific = fse.readJsonSync(specificPath);
+        // 差分のみ上書き
+        for (const key of Object.keys(specific)) {
+            merged[key] = specific[key];
+        }
     }
-    const merged = Object.assign({}, common, specific);
+    // chrome用はapplications/browser_specific_settingsを除去
+    if (target === "chrome") {
+        delete merged.applications;
+        delete merged.browser_specific_settings;
+    }
+    // firefox用はbackground.service_worker→background.scriptsに変換
+    if (target === "firefox" && merged.background && merged.background.service_worker) {
+        merged.background = { scripts: [merged.background.service_worker] };
+        delete merged.background.service_worker;
+    }
+    // Firefox ビルド向けにパッチバージョンを+1（Firefoxはセマンティックバージョニングのみ許可）
+    if (target === "firefox" && merged.version) {
+        const versionParts = String(merged.version).split(".");
+        if (versionParts.length === 3) {
+            const patch = parseInt(versionParts[2], 10);
+            versionParts[2] = String(patch + 1);
+            merged.version = versionParts.join(".");
+        }
+    }
     return merged;
 }
 
@@ -113,11 +136,13 @@ async function build(target = "chrome") {
             const { spawnSync } = require("child_process");
             const res = spawnSync(
                 "npx",
-                ["web-ext", "build", "--source-dir=" + outDir, "--artifacts-dir=" + buildDir],
+                ["web-ext", "build", "--source-dir=" + outDir, "--artifacts-dir=" + buildDir, "--overwrite-dest"],
                 { stdio: "inherit" }
             );
             if (res.error) {
                 console.error("web-ext build failed:", res.error);
+            } else {
+                console.log("✅ web-ext build completed successfully");
             }
         } catch (e) {
             console.error("Failed to run web-ext build:", e.message || e);

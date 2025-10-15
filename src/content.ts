@@ -10,20 +10,56 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         return el.textContent || "";
     };
 
+    // 出席フォーム関連のキーワードパターン（揺れ対応）
+    const attendancePattern = /^(出席|出欠)(フォーム|確認|登録|チェック)$/;
+
     const titleContainsToken = (): boolean => {
-        for (const selector of SELECTORS.titleSelectors) {
-            const el = document.querySelector(selector) as any;
-            if (el) {
-                const title = el.content || textOf(el);
-                if (title && title.indexOf("出席フォーム") !== -1) return true;
+        // 1. メインタイトル要素のみを厳密にチェック（説明文やサブタイトルは除外）
+        const primaryTitleSelectors = ['div[role="heading"]', ".freebirdFormviewerViewHeaderTitle", "h1[data-test-id]"];
+
+        for (const selector of primaryTitleSelectors) {
+            const titleElement = document.querySelector(selector);
+            if (titleElement) {
+                const title = textOf(titleElement).trim();
+                console.debug("[AAF] detectAttendanceForm: checking primary title=", title);
+                if (title) {
+                    if (title.startsWith("出席フォーム") || title.startsWith("出欠フォーム")) {
+                        console.debug("[AAF] detectAttendanceForm: title starts with attendance keyword");
+                        return true;
+                    }
+                    if (attendancePattern.test(title)) {
+                        console.debug("[AAF] detectAttendanceForm: title matches attendance pattern");
+                        return true;
+                    }
+                    if (title.length <= 20 && (title.includes("出席フォーム") || title.includes("出欠フォーム"))) {
+                        console.debug("[AAF] detectAttendanceForm: short title contains attendance keyword");
+                        return true;
+                    }
+                }
             }
         }
-        const headings = Array.prototype.slice.call(
-            document.querySelectorAll('div[role="heading"], h1, h2, h3')
-        ) as Element[];
-        for (const h of headings) {
-            if (textOf(h).indexOf("出席フォーム") !== -1) return true;
+        const metaTitleElement =
+            document.querySelector('meta[property="og:title"]') ||
+            document.querySelector('meta[name="title"]') ||
+            document.querySelector("title");
+
+        if (metaTitleElement) {
+            const metaTitle = (metaTitleElement as any).content || textOf(metaTitleElement);
+            if (metaTitle) {
+                const trimmedTitle = metaTitle.trim();
+                console.debug("[AAF] detectAttendanceForm: checking meta title=", trimmedTitle);
+                if (
+                    trimmedTitle.startsWith("出席フォーム") ||
+                    trimmedTitle.startsWith("出欠フォーム") ||
+                    attendancePattern.test(trimmedTitle)
+                ) {
+                    console.debug("[AAF] detectAttendanceForm: meta title matches");
+                    return true;
+                }
+            }
         }
+
+        console.debug("[AAF] detectAttendanceForm: title does not match attendance form criteria");
         return false;
     };
 
@@ -33,20 +69,14 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         return fromShared.length > 0;
     };
 
-    if (titleContainsToken()) {
-        console.debug("[AAF] detectAttendanceForm: titleContainsToken=true");
-        return hasSubmit();
-    }
-    try {
-        console.debug("[AAF] detectAttendanceForm: waiting for text match");
-        const found = await waitForTextMatch(["出席フォーム"], TIMINGS.completionCheck * 6);
-        console.debug("[AAF] detectAttendanceForm: waitForTextMatch result=", !!found);
-        if (found) return hasSubmit();
-    } catch (e) {
-        console.debug("[AAF] detectAttendanceForm: waitForTextMatch error", e);
+    // タイトルチェックを必須にして、出席フォーム以外では動作しないように厳格化
+    if (!titleContainsToken()) {
+        console.debug("[AAF] detectAttendanceForm: title check failed, not an attendance form");
+        return false;
     }
 
-    return false;
+    console.debug("[AAF] detectAttendanceForm: title check passed");
+    return hasSubmit();
 };
 
 const clickCheckboxes = (): void => {

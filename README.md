@@ -2,166 +2,93 @@
 
 Google フォームの出席フォームを自動で入力・送信し、送信後はタブも自動で閉じるブラウザ拡張機能です。Chrome と Firefox の両方に対応しています。
 
-## 技術スタック
+# 自動出席フォーム (Auto Attendance Form)
 
--   **TypeScript** - 型安全なコード開発
--   **React 19** - モダンなポップアップ UI
--   **Tailwind CSS** - スタイリング
--   **webextension-polyfill** - クロスブラウザ対応
--   **esbuild** - 高速ビルド
--   **Bun** - パッケージ管理とタスクランナー
+## 目的
 
-## プロジェクト構成
+Google フォームの出席フォームを自動で入力・送信するブラウザ拡張機能（Chrome / Firefox 対応）をビルド・配布するためのソースとスクリプトが含まれています。
 
-```
-src/
-├── content.ts          # コンテンツスクリプト（フォーム操作）
-├── popup.tsx          # React ポップアップ UI
-├── popup.css          # Tailwind スタイル
-├── background.ts      # バックグラウンドスクリプト
-├── firefox/           # Firefox 固有の実装
-│   ├── background.ts  # Firefox 用バックグラウンド
-│   └── tabManager.ts  # Firefox 用タブ管理
-└── shared/           # 共通ユーティリティ
-    └── formUtils.ts  # DOM 操作ヘルパー
+## 技術スタック（現状ファイルに基づく）
 
-scripts/
-├── build.js          # メインビルドスクリプト
-└── convert-fonts.js  # フォント変換（TTF → WOFF2）
+-   TypeScript
+-   React
+-   Tailwind CSS
+-   esbuild
+-   webextension-polyfill
+-   bun (スクリプト実行に利用している)
 
-manifest.common.json  # 共通マニフェスト設定
-manifest.chrome.json  # Chrome 固有設定
-manifest.firefox.json # Firefox 固有設定
-```
+## 主要ファイル・ディレクトリ（現状）
 
-## セットアップ
+-   `src/` - 拡張機能のソース（content, popup, background 等）
+-   `scripts/` - ビルド補助スクリプト（`build.js`, `convert-fonts.js`, `clean.js` など）
+-   `dist/` - ビルド出力（`dist/chrome`, `dist/firefox` が生成される）
+-   `build/` - 配布用アーカイブや生成成果物が置かれる（zip や署名済 xpi など）
+-   `manifest.common.json`, `manifest.chrome.json`, `manifest.firefox.json` - マニフェストの元データ
+-   `package.json`, `bun.lock` - スクリプト定義・ロックファイル
 
-### 依存関係のインストール
+## 使えるコマンド（現状の `package.json` に基づく）
 
-```bash
-bun install
-```
+-   `bun install` - 依存インストール
+-   `bun run build:css` - Tailwind CSS のビルド
+-   `node scripts/convert-fonts.js` - フォント変換（TTF → WOFF2）
+-   `bun run build:chrome` - Chrome 用ビルドと zip 生成（`dist/chrome` → `build/*.zip`）
+-   `bun run build:firefox` - Firefox 用ビルドと zip 生成（`dist/firefox` → `build/*.zip`）
+-   `bun run build:all` - 上記をまとめて実行
+-   `bun run clean:build` - `scripts/clean.js` を実行して生成物を削除
+-   `bun run clean:all` - `clean:build` に加えて node_modules 等の削除を行う（`package.json` の定義に依存）
+-   `web-ext sign --source-dir=dist/firefox --artifacts-dir=build/signed` - Firefox 署名（`web-ext` による）
 
-### 開発ビルド
+## 生成物の場所（現状）
 
-全て（フォント変換 + CSS + Chrome ビルド）:
+-   `dist/chrome` - Chrome 用の展開フォルダ（`popup.js`, `background.js`, `manifest.json`, など）
+-   `dist/firefox` - Firefox 用の展開フォルダ
+-   `build/` - ZIP や署名済 XPI（`build/signed/` 配下に署名済 xpi を置く想定）
 
-```bash
-bun run build:all
-```
+## Firefox の署名に関する事実
 
-個別ビルド:
+-   リリース版の Firefox では署名済みの XPI が必要で、未署名の XPI/zip は拒否される（about:addons のメッセージが出る）。
+-   署名は `web-ext sign` を利用して行うことが想定されている（AMO の Developer アカウント / API キーが必要になる場合がある）。
 
-```bash
-# Chrome 用
-bun run build:chrome
+## マニフェスト生成の挙動（現状 `scripts/build.js` のロジック）
 
-# Firefox 用
-bun run build:firefox
+-   `manifest.common.json` を読み込み、`manifest.chrome.json` / `manifest.firefox.json` の差分を上書きしてマージする
+-   Chrome 向けビルドでは `applications` や `browser_specific_settings` を削除して出力する処理がある
+-   Firefox 向けビルドでは `background.service_worker` があれば `background.scripts` に変換する処理が追加されている
 
-# CSS のみ
-bun run build:css
+## デバッグに関する事実
 
-# フォント変換のみ
-bun run build:fonts
-```
+-   コンテンツスクリプトのログはページの DevTools コンソールに出力される
+-   バックグラウンドスクリプトは拡張機能のデバッグページ（about:debugging 等）で確認できる
+-   ポップアップの DevTools はポップアップを開いて検証できる
 
-### 型チェック
+## クリーンアップに関する事実
 
-```bash
-bun run typecheck
-```
+-   `scripts/clean.js` が存在し、`bun run clean:build` で `dist/` の再作成や `.DS_Store` の削除、`build/` 内の成果物削除を行う
 
-### パッケージング
+## ライセンス（現状ファイル）
 
-```bash
-# Chrome 用 ZIP
-bun run package:chrome
+-   `LICENSE` ファイルが存在し、MIT ライセンスが置かれている
 
-# Firefox 用 ZIP
-bun run package:firefox
-```
+---
 
-## インストール方法
+以上はリポジトリ内の現状ファイルとスクリプトに基づく事実の列挙です。
 
-### Chrome
+## トラブルシュート
 
-1. `bun run build:chrome` でビルド
-2. Chrome の拡張機能ページ（chrome://extensions/）を開く
-3. 「デベロッパーモード」を有効にする
-4. 「パッケージ化されていない拡張機能を読み込む」から `dist/chrome` を選択
+-   Firefox で "This add-on could not be installed because it has not been verified." → 署名済 XPI を使うか、一時的なアドオンでテストしてください。
+-   `web-ext sign` で認証エラー → AMO の API キーが正しく設定されているか確認してください。
+-   `tailwindcss` の警告で `caniuse-lite` 更新を促されたら `npx update-browserslist-db@latest` を実行してください。
 
-### Firefox
+## 貢献
 
-1. `bun run build:firefox` でビルド
-2. Firefox の about:debugging を開く
-3. 「この Firefox」→「一時的なアドオン」から `dist/firefox/manifest.json` を選択
-
-または web-ext を使用:
-
-```bash
-cd dist/firefox && npx web-ext run
-```
-
-## 主な機能
-
-### 自動フォーム入力
-
--   Google フォームのタイトルに「出席フォーム」が含まれる場合のみ動作
--   チェックボックスやラベルの自動選択
--   名前欄への自動入力（ポップアップで設定）
--   送信ボタンの自動クリック（ON/OFF 切り替え可能）
-
-### クロスブラウザ対応
-
--   Chrome: `chrome.*` API を直接使用
--   Firefox: `webextension-polyfill` で統一インターフェース
--   ストレージフォールバック: sync → local → background messaging
-
-### モダンな UI
-
--   React + TypeScript による型安全なポップアップ
--   Tailwind CSS による洗練されたデザイン
--   Playwrite フォントによる美しいタイポグラフィ
--   アクセシブルなトグルスイッチ
-
-### 堅牢な動作
-
--   DOM 要素の動的検出（MutationObserver 使用）
--   複数の送信完了検知（ページ更新・完了メッセージ・タイムアウト）
--   エラー時の自動リトライ機能
--   詳細なデバッグログ（`[AAF]` プレフィックス）
-
-## 開発ガイド
-
-### ログの確認
-
-実行時ログは `[AAF]` プレフィックスで出力されます:
-
--   **コンテンツスクリプト**: ページの DevTools コンソール
--   **バックグラウンド**: 拡張機能のサービスワーカー
--   **ポップアップ**: ポップアップの DevTools コンソール
-
-### ビルドシステム
-
--   `esbuild` による高速バンドル
--   ターゲット別出力（`dist/chrome`, `dist/firefox`）
--   自動フォント変換（TTF → WOFF2）
--   マニフェストの自動マージ
-
-### ストレージ設計
-
--   `userName`: ユーザー名（文字列）
--   `autoSubmit`: 自動送信フラグ（boolean）
--   Chrome: `chrome.storage.sync` 優先
--   Firefox: `browser.storage.local` 使用
-
-### デバッグ方法
-
-1. ブラウザの DevTools でコンソールを開く
-2. `[AAF]` でフィルタしてログを確認
-3. 各ステップの実行状況を追跡
+プルリク歓迎です。CI（予定）でビルドが成功することを確認してからマージしてください。
 
 ## ライセンス
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照
+MIT - 詳細は `LICENSE` を参照
+
+---
+
+ドキュメントは随時更新しています。問題や改善案があれば Issue を作成してください。
+
+##　※この文章は AI によって生成されました

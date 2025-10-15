@@ -1,0 +1,105 @@
+name: Build and Release Extensions
+
+on:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Release version (e.g., 1.0.0)"
+                required: true
+                type: string
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Install dependencies
+              run: bun install
+
+            - name: Type check
+              run: bun run typecheck
+
+            - name: Build fonts and CSS
+              run: |
+                  bun run build:fonts
+                  bun run build:css
+
+            - name: Build Chrome extension
+              run: bun run build:chrome
+
+            - name: Build Firefox extension
+              run: bun run build:firefox
+
+            - name: Package Chrome extension
+              run: bun run package:chrome
+
+            - name: Package Firefox extension (unsigned)
+              run: bun run package:firefox
+
+            - name: Sign Firefox extension
+              if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+              env:
+                  WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+                  WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+              run: |
+                  mkdir -p build/signed
+                  bun run sign:firefox
+
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: extension-builds
+                  path: |
+                      build/自動出席フォーム chrome.zip
+                      build/自動出席フォーム firefox.zip
+                      build/signed/*.xpi
+
+    release:
+        needs: build
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  name: extension-builds
+                  path: ./artifacts
+
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: |
+                      ./artifacts/build/自動出席フォーム chrome.zip
+                      ./artifacts/build/自動出席フォーム firefox.zip
+                      ./artifacts/build/signed/*.xpi
+                  body: |
+                      ## 🚀 新しいリリース
+
+                      ### Chrome拡張機能
+                      - `自動出席フォーム chrome.zip` をダウンロードして展開
+                      - Chrome拡張機能ページで「パッケージ化されていない拡張機能を読み込む」
+
+                      ### Firefox拡張機能
+                      #### 開発用（未署名）
+                      - `自動出席フォーム firefox.zip` をダウンロードして展開
+                      - about:debugging で「一時的なアドオン」として読み込み
+
+                      #### 本番用（署名済み）
+                      - `.xpi` ファイルをFirefoxで直接開いてインストール
+
+                      ### 変更点
+                      - 詳細は [CHANGELOG.md](CHANGELOG.md) を参照
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
