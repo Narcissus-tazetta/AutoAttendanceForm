@@ -9,12 +9,9 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         if ((el as any).innerText !== undefined) return (el as any).innerText || el.textContent || "";
         return el.textContent || "";
     };
-
-    // 出席フォーム関連のキーワードパターン（揺れ対応）
-    const attendancePattern = /^(出席|出欠)(フォーム|確認|登録|チェック)$/;
+    const attendancePattern = /^(出席)(フォーム|確認|登録|チェック)$/;
 
     const titleContainsToken = (): boolean => {
-        // 1. メインタイトル要素のみを厳密にチェック（説明文やサブタイトルは除外）
         const primaryTitleSelectors = ['div[role="heading"]', ".freebirdFormviewerViewHeaderTitle", "h1[data-test-id]"];
 
         for (const selector of primaryTitleSelectors) {
@@ -23,7 +20,7 @@ const detectAttendanceForm = async (): Promise<boolean> => {
                 const title = textOf(titleElement).trim();
                 console.debug("[AAF] detectAttendanceForm: checking primary title=", title);
                 if (title) {
-                    if (title.startsWith("出席フォーム") || title.startsWith("出欠フォーム")) {
+                    if (title.startsWith("出席フォーム")) {
                         console.debug("[AAF] detectAttendanceForm: title starts with attendance keyword");
                         return true;
                     }
@@ -31,7 +28,7 @@ const detectAttendanceForm = async (): Promise<boolean> => {
                         console.debug("[AAF] detectAttendanceForm: title matches attendance pattern");
                         return true;
                     }
-                    if (title.length <= 20 && (title.includes("出席フォーム") || title.includes("出欠フォーム"))) {
+                    if (title.length <= 20 && title.includes("出席フォーム")) {
                         console.debug("[AAF] detectAttendanceForm: short title contains attendance keyword");
                         return true;
                     }
@@ -48,11 +45,7 @@ const detectAttendanceForm = async (): Promise<boolean> => {
             if (metaTitle) {
                 const trimmedTitle = metaTitle.trim();
                 console.debug("[AAF] detectAttendanceForm: checking meta title=", trimmedTitle);
-                if (
-                    trimmedTitle.startsWith("出席フォーム") ||
-                    trimmedTitle.startsWith("出欠フォーム") ||
-                    attendancePattern.test(trimmedTitle)
-                ) {
+                if (trimmedTitle.startsWith("出席フォーム") || attendancePattern.test(trimmedTitle)) {
                     console.debug("[AAF] detectAttendanceForm: meta title matches");
                     return true;
                 }
@@ -68,8 +61,6 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         console.debug(`[AAF] detectAttendanceForm: found submit buttons=${fromShared.length}`);
         return fromShared.length > 0;
     };
-
-    // タイトルチェックを必須にして、出席フォーム以外では動作しないように厳格化
     if (!titleContainsToken()) {
         console.debug("[AAF] detectAttendanceForm: title check failed, not an attendance form");
         return false;
