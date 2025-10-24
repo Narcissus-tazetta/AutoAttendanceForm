@@ -238,16 +238,27 @@ const runFormFiller = async (): Promise<void> => {
 
     let userName: string | undefined;
     let autoSubmit = false;
+    // Read stored settings: prefer sync, but if no username is found, fall back to local.
     try {
         const res: any = await browser.storage.sync.get(["userName", "autoSubmit"]);
-        userName = res && res.userName;
-        autoSubmit = res && res.autoSubmit;
+        if (res && res.userName) {
+            userName = res.userName;
+            autoSubmit = res.autoSubmit;
+        }
     } catch (e) {
+        console.debug("[AAF] runFormFiller: storage.sync.get threw, will try local", e);
+    }
+
+    if (!userName) {
         try {
             const resLocal: any = await browser.storage.local.get(["userName", "autoSubmit"]);
-            userName = resLocal && resLocal.userName;
-            autoSubmit = resLocal && resLocal.autoSubmit;
-        } catch (e2) {}
+            if (resLocal && resLocal.userName) {
+                userName = resLocal.userName;
+                autoSubmit = resLocal.autoSubmit;
+            }
+        } catch (e2) {
+            console.debug("[AAF] runFormFiller: storage.local.get threw", e2);
+        }
     }
 
     if (!userName || userName.trim() === "") return;

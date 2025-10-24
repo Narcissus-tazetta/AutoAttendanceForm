@@ -24,28 +24,60 @@ const App = () => {
             const b = await getBrowser();
             if (!b) return;
             try {
-                const res: any = await b.storage.sync.get(["userName", "autoSubmit"]);
-                if (res && res.userName) {
-                    setName(res.userName);
-                }
-                setAutoSubmit(res && res.autoSubmit ? res.autoSubmit : false);
-                return;
-            } catch (e) {}
-
-            try {
                 const resLocal: any = await b.storage.local.get(["userName", "autoSubmit"]);
-                if (resLocal && resLocal.userName) setName(resLocal.userName);
-                setAutoSubmit(resLocal && resLocal.autoSubmit ? resLocal.autoSubmit : false);
-                return;
-            } catch (e) {}
-
-            try {
-                const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
-                if (resMsg) {
-                    if (resMsg.userName) setName(resMsg.userName);
-                    setAutoSubmit(resMsg.autoSubmit || false);
+                if (resLocal && resLocal.userName) {
+                    setName(resLocal.userName);
+                    setAutoSubmit(resLocal && resLocal.autoSubmit ? resLocal.autoSubmit : false);
+                } else {
+                    try {
+                        const resSync: any = await b.storage.sync.get(["userName", "autoSubmit"]);
+                        if (resSync && resSync.userName) {
+                            try {
+                                await b.storage.local.set({
+                                    userName: resSync.userName,
+                                    autoSubmit: resSync.autoSubmit,
+                                });
+                            } catch (eSet) {
+                                console.debug("[AAF] popup: failed to write migrated settings to local", eSet);
+                            }
+                            setName(resSync.userName);
+                            setAutoSubmit(resSync && resSync.autoSubmit ? resSync.autoSubmit : false);
+                        } else {
+                            try {
+                                const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
+                                if (resMsg) {
+                                    if (resMsg.userName) setName(resMsg.userName);
+                                    setAutoSubmit(resMsg.autoSubmit || false);
+                                }
+                            } catch (eMsg) {
+                                console.debug("[AAF] popup: failed to read saved settings via runtime", eMsg);
+                            }
+                        }
+                    } catch (eSync) {
+                        console.debug("[AAF] popup: storage.sync.get failed", eSync);
+                        try {
+                            const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
+                            if (resMsg) {
+                                if (resMsg.userName) setName(resMsg.userName);
+                                setAutoSubmit(resMsg.autoSubmit || false);
+                            }
+                        } catch (eMsg2) {
+                            console.debug("[AAF] popup: failed to read saved settings via runtime", eMsg2);
+                        }
+                    }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.debug("[AAF] popup: storage.local.get threw", e);
+                try {
+                    const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
+                    if (resMsg) {
+                        if (resMsg.userName) setName(resMsg.userName);
+                        setAutoSubmit(resMsg.autoSubmit || false);
+                    }
+                } catch (e2) {
+                    console.debug("[AAF] popup: failed to read saved settings via runtime after local error", e2);
+                }
+            }
         })();
     }, []);
 
@@ -61,31 +93,13 @@ const App = () => {
             return;
         }
         try {
-            await b.storage.sync.set({ userName: name });
+            // write to local only for consistent behavior across browsers
+            await b.storage.local.set({ userName: name });
             setSaved(true);
             setError("");
             setTimeout(() => setSaved(false), 2000);
             return;
         } catch (e) {
-            try {
-                await b.storage.local.set({ userName: name });
-                setSaved(true);
-                setError("");
-                setTimeout(() => setSaved(false), 2000);
-                return;
-            } catch (e2) {
-                try {
-                    const res = await b.runtime.sendMessage({ action: "saveUserName", userName: name });
-                    if (res && res.success) {
-                        setSaved(true);
-                        setError("");
-                        setTimeout(() => setSaved(false), 2000);
-                        return;
-                    }
-                } catch (e3) {
-                    console.debug("[AAF] popup.onSave: runtime message error", e3);
-                }
-            }
             console.error(e);
             setError("保存に失敗しました");
         }
@@ -96,16 +110,15 @@ const App = () => {
         const b = await getBrowser();
         if (!b) return;
         try {
-            await b.storage.sync.set({ autoSubmit: v });
-            return;
-        } catch (e) {}
-        try {
             await b.storage.local.set({ autoSubmit: v });
             return;
-        } catch (e) {}
-        try {
-            await b.runtime.sendMessage({ action: "saveAutoSubmit", autoSubmit: v });
-        } catch (e) {}
+        } catch (e) {
+            try {
+                await b.runtime.sendMessage({ action: "saveAutoSubmit", autoSubmit: v });
+            } catch (e2) {
+                console.debug("[AAF] popup.onAutoChange: failed to persist autoSubmit", e2);
+            }
+        }
     };
 
     return (
