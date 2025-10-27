@@ -5,9 +5,9 @@
     "scripts": {
         "build:fonts": "node scripts/convert-fonts.js",
         "build:css": "tailwindcss -i src/popup.css -o build/popup.css --minify",
-        "build:chrome": "bun run build:css && node scripts/build.js chrome && cd dist/chrome && zip -r ../../build/自動出席フォーム\\ chrome.zip .",
-        "build:firefox": "bun run build:css && node scripts/build.js firefox && cd dist/firefox && zip -r ../../build/自動出席フォーム\\ firefox.zip .",
-        "build:all": "bun run build:fonts && bun run build:css && node scripts/build.js chrome && cd dist/chrome && zip -r ../../build/自動出席フォーム\\ chrome.zip . && cd ../.. && node scripts/build.js firefox && cd dist/firefox && zip -r ../../build/自動出席フォーム\\ firefox.zip .",
+        "build:chrome": "bun run build:css && node scripts/build.js chrome",
+        "build:firefox": "bun run build:css && node scripts/build.js firefox",
+        "build:all": "bun run build:fonts && bun run build:css && node scripts/build.js chrome && node scripts/build.js firefox",
         "clean:build": "node scripts/clean.js",
         "clean:all": "bun run clean:build && rm -rf node_modules bun.lock",
         "sign:firefox": "web-ext sign --source-dir=dist/firefox --artifacts-dir=build/signed",

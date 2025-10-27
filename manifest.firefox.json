@@ -1,6 +1,7 @@
 {
     "background": {
-        "scripts": ["background.js"]
+        "scripts": ["background.js"],
+        "persistent": true
     },
     "permissions": ["storage", "tabs"],
     "browser_specific_settings": {
@@ -8,5 +9,5 @@
             "id": "auto-attendance-form@narcissus-tazetta.github.io"
         }
     },
-    "version": "1.0.3"
+    "version": "1.0.6"
 }

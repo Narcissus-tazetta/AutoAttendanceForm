@@ -113,8 +113,11 @@ async function build(target = "chrome") {
         loader: { ".ts": "ts", ".tsx": "tsx" },
         outdir: outDir,
         sourcemap: false,
-        minify: false,
+        minify: true,
         legalComments: "none",
+        define: {
+            "process.env.NODE_ENV": '"production"',
+        },
     });
     try {
         const rel = path.relative(src, backgroundEntry);
@@ -130,6 +133,30 @@ async function build(target = "chrome") {
     } catch (e) {}
 
     await copyStaticFiles(target, outDir);
+
+    // Ensure a copy of the built files is available under build/<target>/
+    try {
+        const buildTargetDir = path.join(buildDir, target);
+        await fse.remove(buildTargetDir);
+        await fse.copy(outDir, buildTargetDir);
+        console.log(`Copied built files to ${buildTargetDir}`);
+    } catch (e) {
+        console.error("Failed to copy built files to build/:", e.message || e);
+    }
+
+    // Create a zip of the built files into build/<target>.zip
+    try {
+        const { spawnSync } = require("child_process");
+        const zipPath = path.join(buildDir, `${target}.zip`);
+        const zipRes = spawnSync("zip", ["-r", zipPath, "."], { cwd: outDir, stdio: "inherit" });
+        if (zipRes.error) {
+            console.error(`zip failed for ${target}:`, zipRes.error);
+        } else {
+            console.log(`Created zip: ${zipPath}`);
+        }
+    } catch (e) {
+        console.error("Failed to create zip:", e.message || e);
+    }
 
     if (target === "firefox") {
         try {

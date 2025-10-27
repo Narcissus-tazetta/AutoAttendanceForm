@@ -1,6 +1,7 @@
 import { SELECTORS, MESSAGES, TIMINGS } from "./selectors";
 import browser from "webextension-polyfill";
 import { findSubmitButtons as sharedFindSubmitButtons, waitForTextMatch } from "./shared/formUtils";
+import { storageGet } from "./shared/storageHelper";
 
 const detectAttendanceForm = async (): Promise<boolean> => {
     console.debug("[AAF] detectAttendanceForm: start");
@@ -238,27 +239,13 @@ const runFormFiller = async (): Promise<void> => {
 
     let userName: string | undefined;
     let autoSubmit = false;
-    // Read stored settings: prefer sync, but if no username is found, fall back to local.
-    try {
-        const res: any = await browser.storage.sync.get(["userName", "autoSubmit"]);
-        if (res && res.userName) {
-            userName = res.userName;
-            autoSubmit = res.autoSubmit;
-        }
-    } catch (e) {
-        console.debug("[AAF] runFormFiller: storage.sync.get threw, will try local", e);
-    }
 
-    if (!userName) {
-        try {
-            const resLocal: any = await browser.storage.local.get(["userName", "autoSubmit"]);
-            if (resLocal && resLocal.userName) {
-                userName = resLocal.userName;
-                autoSubmit = resLocal.autoSubmit;
-            }
-        } catch (e2) {
-            console.debug("[AAF] runFormFiller: storage.local.get threw", e2);
-        }
+    try {
+        const data = await storageGet(["userName", "autoSubmit"]);
+        userName = data.userName;
+        autoSubmit = data.autoSubmit || false;
+    } catch (e) {
+        console.debug("[AAF] runFormFiller: storage read failed", e);
     }
 
     if (!userName || userName.trim() === "") return;

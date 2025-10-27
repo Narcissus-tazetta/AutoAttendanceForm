@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { closeTab } from "./tabManager";
+import { storageGet, storageSet } from "../shared/storageHelper";
 
 browser.runtime.onMessage.addListener(async (message: any, sender: any) => {
     if (message && message.action === "closeTab") {
@@ -11,7 +12,7 @@ browser.runtime.onMessage.addListener(async (message: any, sender: any) => {
     }
     if (message && message.action === "saveUserName") {
         try {
-            await browser.storage.local.set({ userName: message.userName });
+            await storageSet({ userName: message.userName });
             console.debug("[AAF] background: saved userName");
             return { success: true };
         } catch (e) {
@@ -21,7 +22,7 @@ browser.runtime.onMessage.addListener(async (message: any, sender: any) => {
     }
     if (message && message.action === "getSavedSettings") {
         try {
-            const res = await browser.storage.local.get(["userName", "autoSubmit"]);
+            const res = await storageGet(["userName", "autoSubmit"]);
             console.debug("[AAF] background: getSavedSettings ->", res);
             return { userName: res.userName, autoSubmit: res.autoSubmit };
         } catch (e) {
@@ -31,7 +32,7 @@ browser.runtime.onMessage.addListener(async (message: any, sender: any) => {
     }
     if (message && message.action === "saveAutoSubmit") {
         try {
-            await browser.storage.local.set({ autoSubmit: !!message.autoSubmit });
+            await storageSet({ autoSubmit: !!message.autoSubmit });
             console.debug("[AAF] background: saved autoSubmit=", !!message.autoSubmit);
             return { success: true };
         } catch (e) {

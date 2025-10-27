@@ -1,16 +1,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-
-async function getBrowser() {
-    if ((globalThis as any).browser) return (globalThis as any).browser;
-    try {
-        const mod = await import("webextension-polyfill");
-        return (mod as any).default || (mod as any);
-    } catch (e) {
-        return null;
-    }
-}
+import { storageGet, storageSet } from "./shared/storageHelper";
 
 const App = () => {
     const [name, setName] = useState("");
@@ -21,62 +12,14 @@ const App = () => {
 
     useEffect(() => {
         (async () => {
-            const b = await getBrowser();
-            if (!b) return;
             try {
-                const resLocal: any = await b.storage.local.get(["userName", "autoSubmit"]);
-                if (resLocal && resLocal.userName) {
-                    setName(resLocal.userName);
-                    setAutoSubmit(resLocal && resLocal.autoSubmit ? resLocal.autoSubmit : false);
-                } else {
-                    try {
-                        const resSync: any = await b.storage.sync.get(["userName", "autoSubmit"]);
-                        if (resSync && resSync.userName) {
-                            try {
-                                await b.storage.local.set({
-                                    userName: resSync.userName,
-                                    autoSubmit: resSync.autoSubmit,
-                                });
-                            } catch (eSet) {
-                                console.debug("[AAF] popup: failed to write migrated settings to local", eSet);
-                            }
-                            setName(resSync.userName);
-                            setAutoSubmit(resSync && resSync.autoSubmit ? resSync.autoSubmit : false);
-                        } else {
-                            try {
-                                const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
-                                if (resMsg) {
-                                    if (resMsg.userName) setName(resMsg.userName);
-                                    setAutoSubmit(resMsg.autoSubmit || false);
-                                }
-                            } catch (eMsg) {
-                                console.debug("[AAF] popup: failed to read saved settings via runtime", eMsg);
-                            }
-                        }
-                    } catch (eSync) {
-                        console.debug("[AAF] popup: storage.sync.get failed", eSync);
-                        try {
-                            const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
-                            if (resMsg) {
-                                if (resMsg.userName) setName(resMsg.userName);
-                                setAutoSubmit(resMsg.autoSubmit || false);
-                            }
-                        } catch (eMsg2) {
-                            console.debug("[AAF] popup: failed to read saved settings via runtime", eMsg2);
-                        }
-                    }
+                const data = await storageGet(["userName", "autoSubmit"]);
+                if (data.userName) {
+                    setName(data.userName);
+                    setAutoSubmit(data.autoSubmit || false);
                 }
             } catch (e) {
-                console.debug("[AAF] popup: storage.local.get threw", e);
-                try {
-                    const resMsg = await b.runtime.sendMessage({ action: "getSavedSettings" });
-                    if (resMsg) {
-                        if (resMsg.userName) setName(resMsg.userName);
-                        setAutoSubmit(resMsg.autoSubmit || false);
-                    }
-                } catch (e2) {
-                    console.debug("[AAF] popup: failed to read saved settings via runtime after local error", e2);
-                }
+                console.debug("[AAF] popup: failed to load settings", e);
             }
         })();
     }, []);
@@ -87,18 +30,15 @@ const App = () => {
             return;
         }
         setError("");
-        const b = await getBrowser();
-        if (!b) {
-            setError("保存に失敗しました");
-            return;
-        }
         try {
-            // write to local only for consistent behavior across browsers
-            await b.storage.local.set({ userName: name });
-            setSaved(true);
-            setError("");
-            setTimeout(() => setSaved(false), 2000);
-            return;
+            const success = await storageSet({ userName: name });
+            if (success) {
+                setSaved(true);
+                setError("");
+                setTimeout(() => setSaved(false), 2000);
+            } else {
+                setError("保存に失敗しました");
+            }
         } catch (e) {
             console.error(e);
             setError("保存に失敗しました");
@@ -107,17 +47,10 @@ const App = () => {
 
     const onAutoChange = async (v: boolean) => {
         setAutoSubmit(v);
-        const b = await getBrowser();
-        if (!b) return;
         try {
-            await b.storage.local.set({ autoSubmit: v });
-            return;
+            await storageSet({ autoSubmit: v });
         } catch (e) {
-            try {
-                await b.runtime.sendMessage({ action: "saveAutoSubmit", autoSubmit: v });
-            } catch (e2) {
-                console.debug("[AAF] popup.onAutoChange: failed to persist autoSubmit", e2);
-            }
+            console.debug("[AAF] popup.onAutoChange: failed to persist autoSubmit", e);
         }
     };
 
