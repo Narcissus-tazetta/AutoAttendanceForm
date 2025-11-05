@@ -7,6 +7,97 @@ const src = path.join(root, "src");
 const distRoot = path.join(root, "dist");
 const buildDir = path.join(root, "build");
 
+// Progress weight configuration (must sum to 100)
+const WEIGHTS = {
+    esbuild: 60,
+    copyStatic: 20,
+    copyBuild: 5,
+    zip: 10,
+    webExt: 5,
+};
+
+// Simple terminal progress bar animation. Returns a stop() function.
+function startProgress(tag) {
+    if (!process.stdout.isTTY) {
+        // Not a TTY — return a no-op stopper
+        return () => {};
+    }
+    const max = 12;
+    const frames = [];
+    for (let i = 0; i <= max; i++) {
+        const arrows = ">".repeat(i);
+        const dashes = "-".repeat(max - i);
+        frames.push("[" + arrows + dashes + "]");
+    }
+    let idx = 0;
+    const prefix = tag ? tag + " " : "";
+    process.stdout.write("\n");
+    const timer = setInterval(() => {
+        const frame = frames[idx % frames.length];
+        process.stdout.write(`\r${prefix}${frame}`);
+        idx++;
+    }, 80);
+
+    return (finalMsg) => {
+        clearInterval(timer);
+        // Clear the line completely before printing final message
+        const clearLen = prefix.length + max + 4; // safe width for clearing
+        process.stdout.write("\r" + " ".repeat(clearLen) + "\r");
+        if (finalMsg) {
+            console.log(finalMsg);
+        } else {
+            console.log(`${tag} done`);
+        }
+    };
+}
+
+// Percentage-style progress bar. Returns an object with set(percent, msg) and stop(finalMsg).
+function startPercentProgress(tag) {
+    if (!process.stdout.isTTY) {
+        return { set: () => {}, stop: () => {} };
+    }
+    const width = 28;
+    const prefix = tag ? tag + " " : "";
+    function render(p, msg) {
+        const pct = Math.max(0, Math.min(100, Math.round(p)));
+        const filled = Math.round((pct / 100) * width);
+        const arrows = ">".repeat(filled);
+        const dashes = "-".repeat(Math.max(0, width - filled));
+        const pctLabel = String(pct).padStart(3) + "%";
+        process.stdout.write(`\r${prefix}${pctLabel} [${arrows}${dashes}] ${msg || ""}`);
+    }
+    render(0, "");
+    return {
+        set: (p, msg) => render(p, msg),
+        clear: () => {
+            // clear a reasonably wide line
+            process.stdout.write("\r" + " ".repeat(200) + "\r");
+        },
+        stop: (finalMsg) => {
+            render(100, finalMsg || "");
+            process.stdout.write("\n");
+        },
+    };
+}
+
+// Auto-increment helper: smoothly moves progress from `from` to `to` over time until stopped.
+function startAutoProgress(progressObj, from, to, msInterval = 100) {
+    let current = Math.max(0, Math.min(100, Math.round(from)));
+    progressObj.set(current);
+    // 1% step for fine-grained movement
+    const step = 1;
+    const timer = setInterval(() => {
+        current = Math.min(to, current + step);
+        progressObj.set(current);
+        if (current >= to) {
+            clearInterval(timer);
+        }
+    }, msInterval);
+    return {
+        stop: () => clearInterval(timer),
+    };
+}
+
 function mergeManifest(target) {
     // manifest.common.jsonをベースに、chrome/firefox用差分をマージ
     const common = fse.readJsonSync(path.join(root, "manifest.common.json"));
@@ -103,22 +194,41 @@ async function build(target = "chrome") {
         popup: popupEntry,
     };
 
-    await esbuild.build({
-        entryPoints: entryPointsObj,
-        entryNames: "[name]",
-        bundle: true,
-        format: "iife",
-        platform: "browser",
-        target: "es2020",
-        loader: { ".ts": "ts", ".tsx": "tsx" },
-        outdir: outDir,
-        sourcemap: false,
-        minify: true,
-        legalComments: "none",
-        define: {
-            "process.env.NODE_ENV": '"production"',
-        },
-    });
+    // Show percentage-style progress and update at key steps
+    const progress = startPercentProgress("Build");
+    try {
+        // start esbuild progress from 0 -> WEIGHTS.esbuild with 1% increments
+        progress.set(0, "initializing");
+        const auto = startAutoProgress(progress, 0, WEIGHTS.esbuild, 80);
+        await esbuild.build({
+            entryPoints: entryPointsObj,
+            entryNames: "[name]",
+            bundle: true,
+            format: "iife",
+            platform: "browser",
+            target: "es2020",
+            loader: { ".ts": "ts", ".tsx": "tsx" },
+            outdir: outDir,
+            sourcemap: false,
+            minify: true,
+            legalComments: "none",
+            define: {
+                "process.env.NODE_ENV": '"production"',
+            },
+        });
+        // esbuild finished — stop auto increment and mark esbuild weight
+        if (auto && auto.stop) auto.stop();
+        const esbuiltPct = WEIGHTS.esbuild;
+        progress.set(esbuiltPct, "bundled");
+    } catch (err) {
+        // ensure auto progress is stopped
+        try {
+            if (typeof auto !== "undefined" && auto && auto.stop) auto.stop();
+        } catch (e) {}
+        progress.stop("bundling failed");
+        throw err;
+    }
+
     try {
         const rel = path.relative(src, backgroundEntry);
         const subdir = path.dirname(rel);
@@ -132,13 +242,20 @@ async function build(target = "chrome") {
         }
     } catch (e) {}
 
+    // copy static files and update progress (allocate WEIGHTS.copyStatic)
     await copyStaticFiles(target, outDir);
+    const afterStatic = WEIGHTS.esbuild + WEIGHTS.copyStatic;
+    progress.set(afterStatic, "static files copied");
 
     // Ensure a copy of the built files is available under build/<target>/
     try {
         const buildTargetDir = path.join(buildDir, target);
         await fse.remove(buildTargetDir);
         await fse.copy(outDir, buildTargetDir);
+        const afterCopyBuild = WEIGHTS.esbuild + WEIGHTS.copyStatic + WEIGHTS.copyBuild;
+        progress.set(afterCopyBuild, "copied to build/");
+        // clear progress line before printing details
+        if (progress.clear) progress.clear();
         console.log(`Copied built files to ${buildTargetDir}`);
     } catch (e) {
         console.error("Failed to copy built files to build/:", e.message || e);
@@ -148,10 +265,16 @@ async function build(target = "chrome") {
     try {
         const { spawnSync } = require("child_process");
         const zipPath = path.join(buildDir, `${target}.zip`);
-        const zipRes = spawnSync("zip", ["-r", zipPath, "."], { cwd: outDir, stdio: "inherit" });
+        // run zip quietly so it doesn't print per-file "updating:" lines
+        const zipRes = spawnSync("zip", ["-r", "-q", zipPath, "."], { cwd: outDir, stdio: "ignore" });
         if (zipRes.error) {
+            // show error by clearing progress line first
+            if (progress.clear) progress.clear();
             console.error(`zip failed for ${target}:`, zipRes.error);
         } else {
+            const afterZip = WEIGHTS.esbuild + WEIGHTS.copyStatic + WEIGHTS.copyBuild + WEIGHTS.zip;
+            progress.set(afterZip, "zipped");
+            if (progress.clear) progress.clear();
             console.log(`Created zip: ${zipPath}`);
         }
     } catch (e) {
@@ -167,8 +290,13 @@ async function build(target = "chrome") {
                 { stdio: "inherit" }
             );
             if (res.error) {
+                if (progress.clear) progress.clear();
                 console.error("web-ext build failed:", res.error);
             } else {
+                const afterWebExt =
+                    WEIGHTS.esbuild + WEIGHTS.copyStatic + WEIGHTS.copyBuild + WEIGHTS.zip + WEIGHTS.webExt;
+                progress.set(afterWebExt, "web-ext done");
+                if (progress.clear) progress.clear();
                 console.log("✅ web-ext build completed successfully");
             }
         } catch (e) {
@@ -180,12 +308,21 @@ async function build(target = "chrome") {
         try {
             const { spawnSync } = require("child_process");
             const zipPath = path.join(buildDir, "自動出席フォーム firefox.zip");
-            const zipRes = spawnSync("zip", ["-r", zipPath, "."], { cwd: outDir, stdio: "inherit" });
+            // run zip quietly to avoid per-file "updating:" output
+            const zipRes = spawnSync("zip", ["-r", "-q", zipPath, "."], { cwd: outDir, stdio: "ignore" });
             if (zipRes.error) {
+                if (progress.clear) progress.clear();
+                console.error(`zip failed for firefox:`, zipRes.error);
+            } else {
+                // mark finished and show a single-line message
+                progress.set(100, "zipped firefox");
+                if (progress.clear) progress.clear();
+                console.log(`Created zip: ${zipPath}`);
             }
         } catch (e) {}
     }
 
+    progress.stop("Build complete");
     console.log(`Build complete: ${outDir}`);
 }
 

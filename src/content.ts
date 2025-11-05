@@ -1,78 +1,138 @@
 import { SELECTORS, MESSAGES, TIMINGS } from "./selectors";
 import browser from "webextension-polyfill";
-import { findSubmitButtons as sharedFindSubmitButtons, waitForTextMatch } from "./shared/formUtils";
+import { findSubmitButtons as sharedFindSubmitButtons } from "./shared/formUtils";
 import { storageGet } from "./shared/storageHelper";
 
 const detectAttendanceForm = async (): Promise<boolean> => {
-    console.debug("[AAF] detectAttendanceForm: start");
     const textOf = (el: Element | null): string => {
         if (!el) return "";
         if ((el as any).innerText !== undefined) return (el as any).innerText || el.textContent || "";
         return el.textContent || "";
     };
-    const attendancePattern = /^(出席)(フォーム|確認|登録|チェック)$/;
 
-    const titleContainsToken = (): boolean => {
-        const primaryTitleSelectors = ['div[role="heading"]', ".freebirdFormviewerViewHeaderTitle", "h1[data-test-id]"];
-
-        for (const selector of primaryTitleSelectors) {
-            const titleElement = document.querySelector(selector);
-            if (titleElement) {
-                const title = textOf(titleElement).trim();
-                console.debug("[AAF] detectAttendanceForm: checking primary title=", title);
-                if (title) {
-                    if (title.startsWith("出席フォーム")) {
-                        console.debug("[AAF] detectAttendanceForm: title starts with attendance keyword");
-                        return true;
-                    }
-                    if (attendancePattern.test(title)) {
-                        console.debug("[AAF] detectAttendanceForm: title matches attendance pattern");
-                        return true;
-                    }
-                    if (title.length <= 20 && title.includes("出席フォーム")) {
-                        console.debug("[AAF] detectAttendanceForm: short title contains attendance keyword");
-                        return true;
-                    }
-                }
-            }
+    const titleOk = (): boolean => {
+        const primary = [
+            'div[role="heading"]',
+            ".freebirdFormviewerViewHeaderTitle",
+            "h1[data-test-id]",
+            'meta[itemprop="name"]',
+            "title",
+        ];
+        for (const sel of primary) {
+            const el = document.querySelector(sel);
+            if (!el) continue;
+            const t = textOf(el).trim();
+            if (!t) continue;
+            if (t.indexOf("出席") !== -1) return true;
         }
-        const metaTitleElement =
-            document.querySelector('meta[property="og:title"]') ||
-            document.querySelector('meta[name="title"]') ||
-            document.querySelector("title");
-
-        if (metaTitleElement) {
-            const metaTitle = (metaTitleElement as any).content || textOf(metaTitleElement);
-            if (metaTitle) {
-                const trimmedTitle = metaTitle.trim();
-                console.debug("[AAF] detectAttendanceForm: checking meta title=", trimmedTitle);
-                if (trimmedTitle.startsWith("出席フォーム") || attendancePattern.test(trimmedTitle)) {
-                    console.debug("[AAF] detectAttendanceForm: meta title matches");
-                    return true;
-                }
-            }
+        const meta =
+            document.querySelector('meta[property="og:title"]') || document.querySelector('meta[name="title"]');
+        if (meta) {
+            const m = (meta as any).content || textOf(meta);
+            if (m && m.indexOf("出席") !== -1) return true;
         }
-
-        console.debug("[AAF] detectAttendanceForm: title does not match attendance form criteria");
         return false;
     };
 
-    const hasSubmit = (): boolean => {
-        const fromShared = sharedFindSubmitButtons();
-        console.debug(`[AAF] detectAttendanceForm: found submit buttons=${fromShared.length}`);
-        return fromShared.length > 0;
-    };
-    if (!titleContainsToken()) {
-        console.debug("[AAF] detectAttendanceForm: title check failed, not an attendance form");
-        return false;
-    }
+    const form = document.querySelector('form[action*="/formResponse"]') || document.querySelector("form");
+    if (!form) return false;
 
-    console.debug("[AAF] detectAttendanceForm: title check passed");
-    return hasSubmit();
+    const submitButtons = sharedFindSubmitButtons(form);
+    if (submitButtons.length === 0) return false;
+
+    if (!titleOk()) return false;
+
+    const isVisible = (el: Element): boolean => {
+        const e = el as HTMLElement;
+        if (!e) return false;
+        if (e.getAttribute && e.getAttribute("hidden") !== null) return false;
+        if ((e as any).offsetParent === null && e.tagName.toLowerCase() !== "input") return false;
+        const rect = e.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return false;
+        return true;
+    };
+
+    const getLabelText = (el: Element): string => {
+        const input = el as HTMLInputElement;
+        if (input.id) {
+            const l = document.querySelector(`label[for="${input.id}"]`);
+            if (l) return textOf(l).trim();
+        }
+        const ariaLabel = input.getAttribute && input.getAttribute("aria-label");
+        if (ariaLabel) return ariaLabel;
+        const ariaLabelledBy = input.getAttribute && input.getAttribute("aria-labelledby");
+        if (ariaLabelledBy) {
+            const ids = (ariaLabelledBy || "").split(/\s+/).filter(Boolean);
+            const parts: string[] = [];
+            for (const id of ids) {
+                const ref = document.getElementById(id);
+                if (ref) parts.push(textOf(ref).trim());
+            }
+            if (parts.length) return parts.join(" ");
+        }
+        if ((input as any).placeholder) return (input as any).placeholder;
+        const parentLabel = input.closest("label");
+        if (parentLabel) return textOf(parentLabel).trim();
+        const prev = input.previousElementSibling;
+        if (prev) return textOf(prev).trim();
+        return "";
+    };
+
+    const textInputs = Array.from(form.querySelectorAll('input[type="text"]')).filter((c) => {
+        const el = c as HTMLInputElement;
+        if (!isVisible(c)) return false;
+        if (el.type === "hidden") return false;
+        if (el.disabled) return false;
+        return true;
+    });
+    if (textInputs.length !== 1) return false;
+    const nameInput = textInputs[0] as HTMLInputElement;
+
+    const nameLabel = getLabelText(nameInput);
+    if (!/氏名|名前|フル\s*ネーム|name/i.test(nameLabel)) return false;
+
+    const findEmailCheckbox = (): Element | null => {
+        const candidates = Array.from(document.querySelectorAll('[role="checkbox"]')) as Element[];
+        for (const c of candidates) {
+            if (!isVisible(c)) continue;
+            const txt = textOf(c).trim();
+            const ariaLabel = (c as HTMLElement).getAttribute && (c as HTMLElement).getAttribute("aria-label");
+            const combinedText = txt + " " + (ariaLabel || "");
+            if (/返信に表示するメールアドレス|メールアドレスとして|記録する|Collect email|email/i.test(combinedText))
+                return c;
+        }
+        return null;
+    };
+
+    const emailCheckbox = findEmailCheckbox();
+    if (!emailCheckbox) return false;
+
+    const allInteractive = Array.from(
+        form.querySelectorAll(
+            'input, textarea, select, [role="radio"], [role="checkbox"], [role="listbox"], [role="combobox"], [role="switch"]'
+        )
+    ).filter((n) => {
+        if (!isVisible(n)) return false;
+        const el = n as HTMLInputElement;
+        if (el.type === "hidden") return false;
+        return true;
+    });
+
+    const allowed = new Set<Element>([nameInput as Element, emailCheckbox]);
+    const forbidden = allInteractive.filter((n) => {
+        if (allowed.has(n)) return false;
+        const el = n as HTMLInputElement;
+        const typ = (el.type || "").toLowerCase();
+        if (typ === "text") return false;
+        return true;
+    });
+
+    if (forbidden.length > 0) return false;
+
+    return true;
 };
 
 const clickCheckboxes = (): void => {
-    console.debug("[AAF] clickCheckboxes: start");
     for (const selector of SELECTORS.priorityCheckboxSelectors) {
         const elements = Array.prototype.slice.call(document.querySelectorAll(selector)) as any[];
         for (const element of elements) {
@@ -86,7 +146,6 @@ const clickCheckboxes = (): void => {
                 if (!isChecked) {
                     element.click();
                     element.classList.add("auto-clicked");
-                    console.debug("[AAF] clickCheckboxes: clicked element", element);
                 }
             }
         }
@@ -108,7 +167,6 @@ const clickCheckboxes = (): void => {
                 if (!isChecked) {
                     element.click();
                     element.classList.add("auto-clicked");
-                    console.debug("[AAF] clickCheckboxes: clicked element", element);
                 }
             }
         }
@@ -116,7 +174,6 @@ const clickCheckboxes = (): void => {
 };
 
 const fillInputs = (userName: string): void => {
-    console.debug("[AAF] fillInputs: start, userName=", userName);
     for (const selector of SELECTORS.priorityInputSelectors) {
         const elements = Array.prototype.slice.call(document.querySelectorAll(selector)) as any[];
         for (const input of elements) {
@@ -125,7 +182,6 @@ const fillInputs = (userName: string): void => {
                 input.classList.add("auto-filled");
                 input.dispatchEvent(new Event("input", { bubbles: true }));
                 input.dispatchEvent(new Event("change", { bubbles: true }));
-                console.debug("[AAF] fillInputs: filled input", input);
             }
         }
     }
@@ -141,7 +197,6 @@ const fillInputs = (userName: string): void => {
                 input.classList.add("auto-filled");
                 input.dispatchEvent(new Event("input", { bubbles: true }));
                 input.dispatchEvent(new Event("change", { bubbles: true }));
-                console.debug("[AAF] fillInputs: filled input", input);
             }
         }
     }
@@ -185,12 +240,10 @@ const checkCompletion = (): { allChecked: boolean; namesFilled: boolean } => {
 const findSubmitButtons = (scope: ParentNode = document): Element[] => sharedFindSubmitButtons(scope);
 
 const submitForm = (): void => {
-    console.debug("[AAF] submitForm: start");
     const buttons = findSubmitButtons();
     for (const submitButton of buttons) {
         const el = submitButton as any;
         if (el && !el.classList.contains("auto-submitted")) {
-            console.debug("[AAF] submitForm: clicking button", el, "text=", el.textContent);
             el.click();
             el.classList.add("auto-submitted");
 
@@ -202,7 +255,6 @@ const submitForm = (): void => {
                         const found = (document.body.innerText || "").indexOf(message) !== -1;
                         if (found && !tabCloseTriggered) {
                             tabCloseTriggered = true;
-                            console.debug("[AAF] submitForm: completion message found", message);
                             browser.runtime.sendMessage({ action: "closeTab" });
                             return;
                         }
@@ -213,7 +265,6 @@ const submitForm = (): void => {
             window.addEventListener("beforeunload", () => {
                 if (!tabCloseTriggered) {
                     tabCloseTriggered = true;
-                    console.debug("[AAF] submitForm: beforeunload triggered, requesting closeTab");
                     browser.runtime.sendMessage({ action: "closeTab" });
                 }
             });
@@ -221,7 +272,6 @@ const submitForm = (): void => {
             setTimeout(() => {
                 if (!tabCloseTriggered) {
                     tabCloseTriggered = true;
-                    console.debug("[AAF] submitForm: timeout reached, requesting closeTab");
                     browser.runtime.sendMessage({ action: "closeTab" });
                 }
             }, TIMINGS.tabCloseDelay);
@@ -244,9 +294,7 @@ const runFormFiller = async (): Promise<void> => {
         const data = await storageGet(["userName", "autoSubmit"]);
         userName = data.userName;
         autoSubmit = data.autoSubmit || false;
-    } catch (e) {
-        console.debug("[AAF] runFormFiller: storage read failed", e);
-    }
+    } catch (e) {}
 
     if (!userName || userName.trim() === "") return;
 

@@ -12,7 +12,10 @@ async function ensureOut() {
 
 function convertTtfToWoff2(ttfPath, outPath) {
     try {
-        const ttf2woff2 = require("ttf2woff2");
+        let ttf2woff2 = require("ttf2woff2");
+        if (ttf2woff2 && typeof ttf2woff2 !== "function" && typeof ttf2woff2.default === "function") {
+            ttf2woff2 = ttf2woff2.default;
+        }
         const buf = fse.readFileSync(ttfPath);
         const woff2 = ttf2woff2(buf);
         fse.writeFileSync(outPath, woff2);
