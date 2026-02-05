@@ -1,5 +1,5 @@
-import { SELECTORS, MESSAGES, TIMINGS } from "./selectors";
-import browser from "webextension-polyfill";
+import { SELECTORS, TIMINGS } from "./selectors";
+import { browser } from "wxt/browser";
 import { findSubmitButtons as sharedFindSubmitButtons } from "./shared/formUtils";
 import { storageGet } from "./shared/storageHelper";
 
@@ -52,32 +52,6 @@ const detectAttendanceForm = async (): Promise<boolean> => {
         return true;
     };
 
-    const getLabelText = (el: Element): string => {
-        const input = el as HTMLInputElement;
-        if (input.id) {
-            const l = document.querySelector(`label[for="${input.id}"]`);
-            if (l) return textOf(l).trim();
-        }
-        const ariaLabel = input.getAttribute && input.getAttribute("aria-label");
-        if (ariaLabel) return ariaLabel;
-        const ariaLabelledBy = input.getAttribute && input.getAttribute("aria-labelledby");
-        if (ariaLabelledBy) {
-            const ids = (ariaLabelledBy || "").split(/\s+/).filter(Boolean);
-            const parts: string[] = [];
-            for (const id of ids) {
-                const ref = document.getElementById(id);
-                if (ref) parts.push(textOf(ref).trim());
-            }
-            if (parts.length) return parts.join(" ");
-        }
-        if ((input as any).placeholder) return (input as any).placeholder;
-        const parentLabel = input.closest("label");
-        if (parentLabel) return textOf(parentLabel).trim();
-        const prev = input.previousElementSibling;
-        if (prev) return textOf(prev).trim();
-        return "";
-    };
-
     const textInputs = Array.from(form.querySelectorAll('input[type="text"]')).filter((c) => {
         const el = c as HTMLInputElement;
         if (!isVisible(c)) return false;
@@ -87,9 +61,6 @@ const detectAttendanceForm = async (): Promise<boolean> => {
     });
     if (textInputs.length !== 1) return false;
     const nameInput = textInputs[0] as HTMLInputElement;
-
-    const nameLabel = getLabelText(nameInput);
-    if (!/氏名|名前|フル\s*ネーム|name/i.test(nameLabel)) return false;
 
     const findEmailCheckbox = (): Element | null => {
         const candidates = Array.from(document.querySelectorAll('[role="checkbox"]')) as Element[];
@@ -109,8 +80,8 @@ const detectAttendanceForm = async (): Promise<boolean> => {
 
     const allInteractive = Array.from(
         form.querySelectorAll(
-            'input, textarea, select, [role="radio"], [role="checkbox"], [role="listbox"], [role="combobox"], [role="switch"]'
-        )
+            'input, textarea, select, [role="radio"], [role="checkbox"], [role="listbox"], [role="combobox"], [role="switch"]',
+        ),
     ).filter((n) => {
         if (!isVisible(n)) return false;
         const el = n as HTMLInputElement;
@@ -152,7 +123,7 @@ const clickCheckboxes = (): void => {
     }
 
     const remainingSelectors = SELECTORS.checkboxSelectors.filter(
-        (s) => SELECTORS.priorityCheckboxSelectors.indexOf(s) === -1
+        (s) => SELECTORS.priorityCheckboxSelectors.indexOf(s) === -1,
     );
     for (const selector of remainingSelectors) {
         const elements = Array.prototype.slice.call(document.querySelectorAll(selector)) as any[];
@@ -187,7 +158,7 @@ const fillInputs = (userName: string): void => {
     }
 
     const remainingSelectors = SELECTORS.inputSelectors.filter(
-        (s) => SELECTORS.priorityInputSelectors.indexOf(s) === -1
+        (s) => SELECTORS.priorityInputSelectors.indexOf(s) === -1,
     );
     for (const selector of remainingSelectors) {
         const elements = Array.prototype.slice.call(document.querySelectorAll(selector)) as any[];
@@ -239,53 +210,196 @@ const checkCompletion = (): { allChecked: boolean; namesFilled: boolean } => {
 
 const findSubmitButtons = (scope: ParentNode = document): Element[] => sharedFindSubmitButtons(scope);
 
-const submitForm = (): void => {
+const submitForm = async (autoSubmit = false): Promise<boolean> => {
+    if (!autoSubmit) return false;
+
     const buttons = findSubmitButtons();
-    for (const submitButton of buttons) {
-        const el = submitButton as any;
-        if (el && !el.classList.contains("auto-submitted")) {
-            el.click();
-            el.classList.add("auto-submitted");
+    if (buttons.length === 0) return false;
 
-            let tabCloseTriggered = false;
+    const submitBtn = buttons[0] as HTMLElement;
+    if (!submitBtn || submitBtn.classList.contains("auto-submitted")) return false;
 
-            const checkForCompletion = () => {
-                setTimeout(() => {
-                    for (const message of MESSAGES.completionMessages) {
-                        const found = (document.body.innerText || "").indexOf(message) !== -1;
-                        if (found && !tabCloseTriggered) {
-                            tabCloseTriggered = true;
-                            browser.runtime.sendMessage({ action: "closeTab" });
-                            return;
-                        }
-                    }
-                }, TIMINGS.completionCheck);
-            };
+    submitBtn.click();
+    submitBtn.classList.add("auto-submitted");
 
-            window.addEventListener("beforeunload", () => {
-                if (!tabCloseTriggered) {
-                    tabCloseTriggered = true;
-                    browser.runtime.sendMessage({ action: "closeTab" });
-                }
-            });
+    const initialHref = location.href;
 
-            setTimeout(() => {
-                if (!tabCloseTriggered) {
-                    tabCloseTriggered = true;
-                    browser.runtime.sendMessage({ action: "closeTab" });
-                }
-            }, TIMINGS.tabCloseDelay);
+    const waitForCompletion = new Promise<void>((resolve, reject) => {
+        let timeout: any = null;
+        let urlPollInterval: any = null;
 
-            checkForCompletion();
-            break;
-        }
+        const cleanup = () => {
+            if (timeout) clearTimeout(timeout);
+            if (urlPollInterval) clearInterval(urlPollInterval);
+            window.removeEventListener("popstate", onUrlChange);
+            window.removeEventListener("hashchange", onUrlChange);
+        };
+
+        const onUrlChange = () => {
+            if (location.href !== initialHref) {
+                cleanup();
+                console.log("URL changed detected:", location.href);
+                resolve();
+            }
+        };
+
+        timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error("Timeout waiting for submission (30s)"));
+        }, 30000);
+
+        window.addEventListener("popstate", onUrlChange);
+        window.addEventListener("hashchange", onUrlChange);
+        urlPollInterval = setInterval(() => {
+            try {
+                onUrlChange();
+            } catch {}
+        }, 250);
+    });
+
+    try {
+        await waitForCompletion;
+        await new Promise((r) => setTimeout(r, 100));
+        return await triggerClose();
+    } catch (e) {
+        console.error("Submission verification failed:", e);
+        return false;
     }
 };
 
-const runFormFiller = async (): Promise<void> => {
-    if ((window.location.href as string).indexOf("edit") !== -1) return;
-    const ok = await detectAttendanceForm();
-    if (!ok) return;
+const waitForForm = async (): Promise<boolean> => {
+    const maxDuration = 10000;
+    const interval = 500;
+    const startTime = Date.now();
+
+    return new Promise((resolve) => {
+        const check = async () => {
+            const isMatch = await detectAttendanceForm();
+            if (isMatch) {
+                resolve(true);
+                return;
+            }
+            if (Date.now() - startTime > maxDuration) {
+                resolve(false);
+                return;
+            }
+            setTimeout(check, interval);
+        };
+        check();
+    });
+};
+
+let __cachedTabId: number | undefined;
+let __closeTriggered = false;
+let __urlWatcherActive = false;
+let __closeArmed = false;
+
+async function ensureTabId() {
+    if (__cachedTabId) return;
+    const maxAttempts = 3;
+    for (let i = 0; i < maxAttempts; i++) {
+        try {
+            const res: any = await browser.runtime.sendMessage({ action: "identifyTab", url: location.href });
+            if (res && res.tabId) {
+                __cachedTabId = res.tabId;
+                return;
+            }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 200));
+    }
+}
+
+async function armClose() {
+    if (__closeArmed) return;
+    __closeArmed = true;
+    try {
+        await browser.runtime.sendMessage({ action: "arm_close", tabId: __cachedTabId, url: location.href });
+    } catch {}
+}
+
+async function closeTabWithRetry(maxAttempts = 3) {
+    await ensureTabId();
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            await browser.runtime.sendMessage({ action: "close_tab", tabId: __cachedTabId });
+            await browser.storage.local.set({
+                lastCloseSent: { success: true, tabId: __cachedTabId, attempt, ts: Date.now() },
+            });
+        } catch (_err) {
+            await browser.storage.local.set({
+                lastCloseSent: { success: false, tabId: __cachedTabId, attempt, error: String(_err), ts: Date.now() },
+            });
+        }
+
+        await new Promise((r) => setTimeout(r, 350));
+        try {
+            const st: any = await browser.storage.local.get("lastClose");
+            if (st && st.lastClose && st.lastClose.success) return true;
+        } catch {}
+    }
+    return false;
+}
+
+async function triggerClose(): Promise<boolean> {
+    if (__closeTriggered) return true;
+    __closeTriggered = true;
+    try {
+        const res: any = await browser.runtime.sendMessage({
+            action: "close_window",
+            tabId: __cachedTabId,
+            url: location.href,
+        });
+        if (res && res.success) return true;
+        const fallback = await closeTabWithRetry();
+        return fallback;
+    } catch {
+        return false;
+    }
+}
+
+function setupUrlCloseWatcher() {
+    if (__urlWatcherActive) return;
+    __urlWatcherActive = true;
+    const startHref = location.href;
+    let urlPollInterval: any = null;
+
+    const cleanup = () => {
+        if (urlPollInterval) clearInterval(urlPollInterval);
+        window.removeEventListener("popstate", onUrlChange);
+        window.removeEventListener("hashchange", onUrlChange);
+    };
+
+    const onUrlChange = () => {
+        if (__closeTriggered) return;
+        if (location.href === startHref) return;
+        if (location.href.indexOf("formResponse") === -1) return;
+        cleanup();
+        triggerClose();
+    };
+
+    window.addEventListener("popstate", onUrlChange);
+    window.addEventListener("hashchange", onUrlChange);
+    urlPollInterval = setInterval(() => {
+        try {
+            onUrlChange();
+        } catch {}
+    }, 250);
+}
+
+export const runFormFiller = async (): Promise<void> => {
+    if (window.location.pathname.endsWith("/edit")) return;
+
+    setupUrlCloseWatcher();
+
+    await ensureTabId();
+    await armClose();
+
+    const ok = await waitForForm();
+    if (!ok) {
+        return;
+    }
+
+    setupUrlCloseWatcher();
 
     let userName: string | undefined;
     let autoSubmit = false;
@@ -294,32 +408,32 @@ const runFormFiller = async (): Promise<void> => {
         const data = await storageGet(["userName", "autoSubmit"]);
         userName = data.userName;
         autoSubmit = data.autoSubmit || false;
-    } catch (e) {}
+    } catch {}
 
     if (!userName || userName.trim() === "") return;
 
     clickCheckboxes();
     fillInputs(userName);
 
-    setTimeout(() => {
+    setTimeout(async () => {
         const { allChecked, namesFilled } = checkCompletion();
 
         if (allChecked && namesFilled) {
-            if (autoSubmit) submitForm();
+            if (autoSubmit) await submitForm(autoSubmit);
         } else {
-            setTimeout(() => {
+            setTimeout(async () => {
                 if (!allChecked) clickCheckboxes();
                 if (!namesFilled) fillInputs(userName);
 
                 let retryCount = 0;
-                const retrySubmit = () => {
+                const retrySubmit = async () => {
                     if (retryCount >= TIMINGS.maxRetries) return;
 
-                    setTimeout(() => {
+                    setTimeout(async () => {
                         const { allChecked: recheckAllChecked, namesFilled: recheckNamesFilled } = checkCompletion();
 
                         if (recheckAllChecked && recheckNamesFilled) {
-                            if (autoSubmit) submitForm();
+                            if (autoSubmit) await submitForm(autoSubmit);
                         } else {
                             retryCount++;
                             retrySubmit();
@@ -333,10 +447,12 @@ const runFormFiller = async (): Promise<void> => {
     }, TIMINGS.completionCheck);
 };
 
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", runFormFiller);
-} else {
-    runFormFiller();
-}
+export function initContentScript() {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", runFormFiller);
+    } else {
+        runFormFiller();
+    }
 
-setTimeout(runFormFiller, TIMINGS.fallbackRun);
+    setTimeout(runFormFiller, TIMINGS.fallbackRun);
+}

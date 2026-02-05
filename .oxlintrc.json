@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    ".wxt/**",
+    ".output/**",
+    "build/**",
+    "dist/**",
+    "build/*.zip",
+    "build/signed/**",
+    "*.xpi",
+    "Playwrite_DE_SAS/**"
+  ],
+  "rules": {
+    "typescript-eslint/triple-slash-reference": "off"
+  }
+}

@@ -2,16 +2,17 @@ import browser from "webextension-polyfill";
 
 async function isFirefox(): Promise<boolean> {
     try {
+        if (typeof import.meta !== "undefined" && (import.meta as any).env && (import.meta as any).env.FIREFOX) {
+            return true;
+        }
         if (typeof navigator !== "undefined" && navigator.userAgent) {
-            return navigator.userAgent.includes("Firefox");
+            if (navigator.userAgent.includes("Firefox")) return true;
         }
         if (typeof browser.runtime.getBrowserInfo === "function") {
             const info = await browser.runtime.getBrowserInfo();
-            return info.name === "Firefox";
+            return info && info.name === "Firefox";
         }
-    } catch (e) {
-        void e;
-    }
+    } catch {}
     return false;
 }
 
@@ -26,7 +27,7 @@ export async function storageGet(keys: (keyof StorageData)[]): Promise<StorageDa
     if (firefox) {
         try {
             return await browser.storage.local.get(keys);
-        } catch (e) {
+        } catch {
             return {};
         }
     }
@@ -36,18 +37,18 @@ export async function storageGet(keys: (keyof StorageData)[]): Promise<StorageDa
         if (syncData && syncData.userName) {
             try {
                 await browser.storage.local.set(syncData);
-            } catch (e) {
-                void e;
+            } catch {
+                // ignore
             }
             return syncData;
         }
-    } catch (e) {
-        void e;
+    } catch {
+        // ignore
     }
 
     try {
         return await browser.storage.local.get(keys);
-    } catch (e) {
+    } catch {
         return {};
     }
 }
@@ -59,7 +60,7 @@ export async function storageSet(data: StorageData): Promise<boolean> {
         try {
             await browser.storage.local.set(data);
             return true;
-        } catch (e) {
+        } catch {
             return false;
         }
     }
@@ -68,15 +69,15 @@ export async function storageSet(data: StorageData): Promise<boolean> {
         await browser.storage.sync.set(data);
         try {
             await browser.storage.local.set(data);
-        } catch (e) {
-            void e;
+        } catch {
+            // ignore
         }
         return true;
-    } catch (e) {
+    } catch {
         try {
             await browser.storage.local.set(data);
             return true;
-        } catch (e2) {
+        } catch {
             return false;
         }
     }

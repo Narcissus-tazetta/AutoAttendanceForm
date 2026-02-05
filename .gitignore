@@ -19,6 +19,8 @@ bun.lockb
 dist/
 build/
 archive/
+.output/
+.wxt/
 
 # Browser extension packages
 *.zip
@@ -41,3 +43,5 @@ yarn-error.log*
 /popup.js
 /selectors.js
 /manifest.json
+
+.vite-cache/

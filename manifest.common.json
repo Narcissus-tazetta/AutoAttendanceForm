@@ -1,23 +1,12 @@
 {
-    "manifest_version": 3,
     "name": "自動出席フォーム",
-    "version": "1.0.3",
+    "version": "1.0.5",
     "description": "Googleフォームの出席フォームを自動で入力・送信する拡張機能",
-    "permissions": ["storage"],
-    "host_permissions": ["https://docs.google.com/forms/*"],
-    "content_scripts": [
-        {
-            "matches": ["https://docs.google.com/forms/*"],
-            "js": ["content.js"]
-        }
-    ],
+    "permissions": ["storage", "tabs"],
     "icons": {
-        "16": "list-details.png",
-        "32": "list-details.png",
-        "48": "list-details.png",
-        "128": "list-details.png"
-    },
-    "action": {
-        "default_popup": "popup.html"
+        "16": "icons/list-details.png",
+        "32": "icons/list-details.png",
+        "48": "icons/list-details.png",
+        "128": "icons/list-details.png"
     }
 }

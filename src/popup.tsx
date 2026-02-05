@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { storageGet, storageSet } from "./shared/storageHelper";
@@ -50,38 +49,45 @@ const App = () => {
         try {
             await storageSet({ autoSubmit: v });
         } catch (e) {
-            console.debug("[AAF] popup.onAutoChange: failed to persist autoSubmit", e);
+            console.debug("[AAF] popup: failed to persist", e);
         }
     };
 
     return (
-        <div className="popup-root">
-            <div className="font-playwrite text-base font-semibold mb-2">Automatic Attendance Form</div>
-            <label className="block mb-1">名前</label>
+        <div className="w-[320px] rounded-md bg-cyan-50 p-3 font-sans text-slate-800">
+            <div className="font-playwrite mb-2 text-base font-semibold">Automatic Attendance Form</div>
+            <label htmlFor="userNameInput" className="mb-1 block text-sm font-medium">
+                名前
+            </label>
             <input
+                id="userNameInput"
                 value={name}
                 onChange={(e) => {
                     setName(e.target.value);
                     if (error) setError("");
                 }}
-                className="w-full p-2 rounded-md border border-[#2196f3] box-border"
+                className="w-full rounded-md border border-primary p-2 outline-none focus:ring-2 focus:ring-primary/50"
                 placeholder="例：山田太郎"
             />
-            <button onClick={onSave} className="save-button mt-2 rounded-md">
+            <button
+                onClick={onSave}
+                className="mt-2 w-full rounded-md bg-primary py-2 text-white transition hover:brightness-90 active:translate-y-px"
+            >
                 保存する
             </button>
-            {saved && <div className="text-green-600 text-sm mt-2">保存完了</div>}
-            {error && <div className="text-red-700 text-sm mt-2">{error}</div>}
 
-            <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center">
+            {saved && <div className="mt-2 text-sm text-green-600">保存完了</div>}
+            {error && <div className="mt-2 text-sm text-red-700">{error}</div>}
+
+            <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center text-sm">
                     <span>自動送信</span>
                     <button
                         type="button"
+                        aria-label="ヘルプを表示"
                         aria-expanded={helpVisible}
-                        aria-controls="autoSubmitHelp"
-                        onClick={() => setHelpVisible((v) => !v)}
-                        className="help-button border-[#2196f3] text-[#2196f3] ml-2"
+                        onClick={() => setHelpVisible((v: boolean) => !v)}
+                        className="ml-2 flex h-4 w-4 items-center justify-center rounded-full border border-primary text-xs text-primary hover:bg-primary/10"
                     >
                         ?
                     </button>
@@ -91,31 +97,21 @@ const App = () => {
                     role="switch"
                     aria-checked={autoSubmit}
                     onClick={() => onAutoChange(!autoSubmit)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onAutoChange(!autoSubmit);
-                        }
-                    }}
-                    className="switch-btn"
-                    style={{
-                        width: 40,
-                        height: 22,
-                        background: autoSubmit ? "#2196f3" : "#ccc",
-                        justifyContent: autoSubmit ? "flex-end" : "flex-start",
-                        cursor: "pointer",
-                        padding: 2,
-                        border: "none",
-                    }}
+                    className={`
+                        relative h-5 w-10 px-1 flex items-center cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50
+                        ${autoSubmit ? "bg-primary" : "bg-gray-300"}
+                    `}
                 >
-                    <span className="switch-circle" style={{ width: 16, height: 16 }} />
+                    <span
+                        aria-hidden="true"
+                        className={`
+                            pointer-events-none absolute left-1 top-1/2 transform -translate-y-1/2 h-4 w-4 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
+                            ${autoSubmit ? "translate-x-4" : "translate-x-0"}
+                        `}
+                    />
                 </button>
             </div>
-            {helpVisible && (
-                <div id="autoSubmitHelp" style={{ marginTop: 8, fontSize: 12, color: "#333" }}>
-                    フォーム送信後、タブを自動で閉じます。
-                </div>
-            )}
+            {helpVisible && <div className="mt-2 text-xs text-slate-600">フォーム送信後、タブを自動で閉じます。</div>}
         </div>
     );
 };

@@ -57,13 +57,22 @@ export const SELECTORS: {
 };
 
 export const MESSAGES = {
-    completionMessages: ["回答を記録しました", "送信完了", "ありがとうございました", "Your response has been recorded"],
+    completionMessages: [
+        "回答を記録しました",
+        "送信完了",
+        "ありがとうございました",
+        "Your response has been recorded",
+        "送信されました",
+        "Thank you for your response",
+        "別の回答を送信",
+    ],
 } as const;
 
 export const TIMINGS = {
     completionCheck: 500,
-    retryInterval: 500,
+    retryInterval: 5000,
     tabCloseDelay: 3000,
     fallbackRun: 2000,
+    proactiveCloseDelay: 1000,
     maxRetries: 2,
 } as const;

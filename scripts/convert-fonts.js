@@ -4,7 +4,8 @@ require("child_process");
 
 const root = path.resolve(__dirname, "..");
 const fontDir = path.join(root, "Playwrite_DE_SAS");
-const outDir = path.join(root, "dist", "Playwrite_DE_SAS");
+// Output to public so WXT will include the font in the packaged extension
+const outDir = path.join(root, "public", "Playwrite_DE_SAS");
 
 async function ensureOut() {
     await fse.ensureDir(outDir);
