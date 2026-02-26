@@ -7,16 +7,18 @@ const App = () => {
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState("");
     const [autoSubmit, setAutoSubmit] = useState(false);
+    const [autoCloseTab, setAutoCloseTab] = useState(true);
     const [helpVisible, setHelpVisible] = useState(false);
 
     useEffect(() => {
         (async () => {
             try {
-                const data = await storageGet(["userName", "autoSubmit"]);
+                const data = await storageGet(["userName", "autoSubmit", "autoCloseTab"]);
                 if (data.userName) {
                     setName(data.userName);
-                    setAutoSubmit(data.autoSubmit || false);
                 }
+                setAutoSubmit(data.autoSubmit || false);
+                setAutoCloseTab(data.autoCloseTab ?? true);
             } catch (e) {
                 console.debug("[AAF] popup: failed to load settings", e);
             }
@@ -48,6 +50,15 @@ const App = () => {
         setAutoSubmit(v);
         try {
             await storageSet({ autoSubmit: v });
+        } catch (e) {
+            console.debug("[AAF] popup: failed to persist", e);
+        }
+    };
+
+    const onAutoCloseChange = async (v: boolean) => {
+        setAutoCloseTab(v);
+        try {
+            await storageSet({ autoCloseTab: v });
         } catch (e) {
             console.debug("[AAF] popup: failed to persist", e);
         }
@@ -111,7 +122,32 @@ const App = () => {
                     />
                 </button>
             </div>
-            {helpVisible && <div className="mt-2 text-xs text-slate-600">フォーム送信後、タブを自動で閉じます。</div>}
+            {helpVisible && <div className="mt-2 text-xs text-slate-600">フォームを検知後、自動で送信します。</div>}
+
+            <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center text-sm">
+                    <span>自動でタブを閉じる</span>
+                </div>
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={autoCloseTab}
+                    onClick={() => onAutoCloseChange(!autoCloseTab)}
+                    className={`
+                        relative h-5 w-10 px-1 flex items-center cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50
+                        ${autoCloseTab ? "bg-primary" : "bg-gray-300"}
+                    `}
+                >
+                    <span
+                        aria-hidden="true"
+                        className={`
+                            pointer-events-none absolute left-1 top-1/2 transform -translate-y-1/2 h-4 w-4 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out
+                            ${autoCloseTab ? "translate-x-4" : "translate-x-0"}
+                        `}
+                    />
+                </button>
+            </div>
+            <div className="mt-2 text-xs text-slate-600">完了画面に遷移したら、このタブを自動で閉じます。</div>
         </div>
     );
 };

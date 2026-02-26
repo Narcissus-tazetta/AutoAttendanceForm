@@ -383,7 +383,7 @@ const waitForCompletionSignal = (timeoutMs = 30000, urlFallbackDelayMs = 1500): 
     });
 };
 
-const submitForm = async (autoSubmit = false): Promise<boolean> => {
+const submitForm = async (autoSubmit = false, autoCloseTab = true): Promise<boolean> => {
     if (!autoSubmit) return false;
 
     const buttons = findSubmitButtons();
@@ -399,6 +399,7 @@ const submitForm = async (autoSubmit = false): Promise<boolean> => {
         const completionOk = await waitForCompletionSignal(30000, 1500);
         if (!completionOk) throw new Error("Timeout waiting for completion signal");
         await new Promise((r) => setTimeout(r, 100));
+        if (!autoCloseTab) return true;
         return await triggerClose();
     } catch (e) {
         console.error("Submission verification failed:", e);
@@ -547,26 +548,31 @@ function setupUrlCloseWatcher() {
 export const runFormFiller = async (): Promise<void> => {
     if (window.location.pathname.endsWith("/edit")) return;
 
-    setupUrlCloseWatcher();
+    let userName: string | undefined;
+    let autoSubmit = false;
+    let autoCloseTab = true;
 
-    await ensureTabId();
-    await armClose();
+    try {
+        const data = await storageGet(["userName", "autoSubmit", "autoCloseTab"]);
+        userName = data.userName;
+        autoSubmit = data.autoSubmit || false;
+        autoCloseTab = data.autoCloseTab ?? true;
+    } catch {}
+
+    if (autoCloseTab) {
+        setupUrlCloseWatcher();
+        await ensureTabId();
+        await armClose();
+    }
 
     const ok = await waitForForm();
     if (!ok) {
         return;
     }
 
-    setupUrlCloseWatcher();
-
-    let userName: string | undefined;
-    let autoSubmit = false;
-
-    try {
-        const data = await storageGet(["userName", "autoSubmit"]);
-        userName = data.userName;
-        autoSubmit = data.autoSubmit || false;
-    } catch {}
+    if (autoCloseTab) {
+        setupUrlCloseWatcher();
+    }
 
     if (!userName || userName.trim() === "") return;
 
@@ -577,7 +583,7 @@ export const runFormFiller = async (): Promise<void> => {
         const { allChecked, namesFilled } = checkCompletion();
 
         if (allChecked && namesFilled) {
-            if (autoSubmit) await submitForm(autoSubmit);
+            if (autoSubmit) await submitForm(autoSubmit, autoCloseTab);
         } else {
             setTimeout(async () => {
                 if (!allChecked) clickCheckboxes();
@@ -591,7 +597,7 @@ export const runFormFiller = async (): Promise<void> => {
                         const { allChecked: recheckAllChecked, namesFilled: recheckNamesFilled } = checkCompletion();
 
                         if (recheckAllChecked && recheckNamesFilled) {
-                            if (autoSubmit) await submitForm(autoSubmit);
+                            if (autoSubmit) await submitForm(autoSubmit, autoCloseTab);
                         } else {
                             retryCount++;
                             retrySubmit();

@@ -19,6 +19,7 @@ async function isFirefox(): Promise<boolean> {
 export interface StorageData {
     userName?: string;
     autoSubmit?: boolean;
+    autoCloseTab?: boolean;
 }
 
 export async function storageGet(keys: (keyof StorageData)[]): Promise<StorageData> {
@@ -34,7 +35,8 @@ export async function storageGet(keys: (keyof StorageData)[]): Promise<StorageDa
 
     try {
         const syncData = await browser.storage.sync.get(keys);
-        if (syncData && syncData.userName) {
+        const hasAnyRequestedKey = keys.some((key) => syncData[key] !== undefined);
+        if (syncData && hasAnyRequestedKey) {
             try {
                 await browser.storage.local.set(syncData);
             } catch {
