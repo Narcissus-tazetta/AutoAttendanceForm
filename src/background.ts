@@ -3,6 +3,7 @@ import { browser } from "wxt/browser";
 
 export default defineBackground(() => {
     const armedTabs = new Map<number, number>();
+    const closePermittedTabs = new Map<number, number>();
     const ARM_TTL_MS = 2 * 60 * 1000;
 
     const isArmed = (tabId: number): boolean => {
@@ -20,9 +21,24 @@ export default defineBackground(() => {
         return url.indexOf("formResponse") !== -1;
     };
 
+    const isClosePermitted = (tabId: number): boolean => {
+        const ts = closePermittedTabs.get(tabId);
+        if (!ts) return false;
+        if (Date.now() - ts > ARM_TTL_MS) {
+            closePermittedTabs.delete(tabId);
+            return false;
+        }
+        return true;
+    };
+
+    const permitClose = (tabId: number) => {
+        closePermittedTabs.set(tabId, Date.now());
+    };
+
     const closeByUrl = (tabId: number, url?: string) => {
         if (!shouldCloseByUrl(url)) return;
         if (!isArmed(tabId)) return;
+        if (!isClosePermitted(tabId)) return;
         setTimeout(() => {
             try {
                 void browser.tabs.remove(tabId).catch(() => {
@@ -42,6 +58,7 @@ export default defineBackground(() => {
 
     browser.tabs.onRemoved.addListener((tabId) => {
         armedTabs.delete(tabId);
+        closePermittedTabs.delete(tabId);
     });
 
     browser.runtime.onMessage.addListener((message: any, sender: any, sendResponse: any) => {
@@ -137,6 +154,10 @@ export default defineBackground(() => {
 
                 const tryRemove = async (id: number | undefined) => {
                     if (!id) return false;
+                    if (!isClosePermitted(id)) {
+                        await recordAttempt(id, "not permitted");
+                        return false;
+                    }
                     try {
                         await browser.tabs.remove(id);
                         await browser.storage.local.set({
@@ -236,6 +257,15 @@ export default defineBackground(() => {
             const requestedTabId = message && message.tabId ? message.tabId : undefined;
             const tabId = requestedTabId || senderTabId;
             if (tabId) armedTabs.set(tabId, Date.now());
+            sendResponse({ success: !!tabId });
+            return true;
+        }
+
+        if (message.action === "permit_close") {
+            const senderTabId = sender && sender.tab && sender.tab.id ? sender.tab.id : undefined;
+            const requestedTabId = message && message.tabId ? message.tabId : undefined;
+            const tabId = requestedTabId || senderTabId;
+            if (tabId) permitClose(tabId);
             sendResponse({ success: !!tabId });
             return true;
         }

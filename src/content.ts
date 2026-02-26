@@ -1,4 +1,4 @@
-import { SELECTORS, TIMINGS } from "./selectors";
+import { MESSAGES, SELECTORS, TIMINGS } from "./selectors";
 import { browser } from "wxt/browser";
 import { findSubmitButtons as sharedFindSubmitButtons } from "./shared/formUtils";
 import { storageGet } from "./shared/storageHelper";
@@ -210,6 +210,179 @@ const checkCompletion = (): { allChecked: boolean; namesFilled: boolean } => {
 
 const findSubmitButtons = (scope: ParentNode = document): Element[] => sharedFindSubmitButtons(scope);
 
+const hasCompletionMessage = (): boolean => {
+    const bodyText = document.body?.innerText || document.body?.textContent || "";
+    const docText = document.documentElement?.textContent || "";
+    const text = `${bodyText}\n${docText}`;
+    if (!text) return false;
+    for (const msg of MESSAGES.completionMessages) {
+        if (text.indexOf(msg) !== -1) return true;
+    }
+    return false;
+};
+
+const isResponseUrl = (): boolean => location.href.indexOf("formResponse") !== -1;
+
+const textOf = (el: Element | null): string => {
+    if (!el) return "";
+    return ((el as HTMLElement).innerText || el.textContent || "").trim();
+};
+
+const isVisible = (el: Element): boolean => {
+    const node = el as HTMLElement;
+    if (!node) return false;
+    if (node.getAttribute("hidden") !== null) return false;
+    const style = window.getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+};
+
+const getActionButtons = (): HTMLElement[] => {
+    const nodes = Array.from(
+        document.querySelectorAll(
+            'button, [role="button"], div[role="button"], input[type="submit"], input[type="button"]',
+        ),
+    ) as HTMLElement[];
+    return nodes.filter((n) => isVisible(n));
+};
+
+const hasNextButtonVisible = (): boolean => {
+    const rx = /次へ|next/i;
+    return getActionButtons().some((btn) => {
+        const txt = `${textOf(btn)} ${(btn.getAttribute("aria-label") || "").trim()}`;
+        return rx.test(txt);
+    });
+};
+
+const hasSubmitButtonVisible = (): boolean => {
+    const rx = /送信|submit/i;
+    return getActionButtons().some((btn) => {
+        const txt = `${textOf(btn)} ${(btn.getAttribute("aria-label") || "").trim()}`;
+        return rx.test(txt);
+    });
+};
+
+const hasValidationError = (): boolean => {
+    const alertNodes = Array.from(
+        document.querySelectorAll('[role="alert"], .freebirdFormviewerViewItemsItemErrorMessage'),
+    );
+    for (const node of alertNodes) {
+        if (!isVisible(node)) continue;
+        const txt = textOf(node);
+        if (/必須|required|入力してください|この質問は必須/i.test(txt)) return true;
+    }
+    const pageText = document.body?.innerText || "";
+    return /必須項目|必須の質問|This is a required question/i.test(pageText);
+};
+
+const hasAnotherResponseSignal = (): boolean => {
+    const pageText = document.body?.innerText || document.body?.textContent || "";
+    return /別の回答を送信|Submit another response|回答を送信済み|Your response has been recorded/i.test(pageText);
+};
+
+const isStrongCompletionSignal = (): boolean => {
+    const completionMessage = hasCompletionMessage();
+    const anotherResponse = hasAnotherResponseSignal();
+    const nextVisible = hasNextButtonVisible();
+    const submitVisible = hasSubmitButtonVisible();
+    const validationError = hasValidationError();
+    if (nextVisible || validationError) return false;
+    if (!completionMessage && !anotherResponse) return false;
+    if (submitVisible && !anotherResponse) return false;
+    return true;
+};
+
+const waitForCompletionSignal = (timeoutMs = 30000, urlFallbackDelayMs = 1500): Promise<boolean> => {
+    return new Promise((resolve) => {
+        let timeout: any = null;
+        let urlPollInterval: any = null;
+        let completionPollInterval: any = null;
+        let observer: MutationObserver | null = null;
+        let responseDetectedAt: number | null = isResponseUrl() ? Date.now() : null;
+
+        const cleanup = () => {
+            if (timeout) clearTimeout(timeout);
+            if (urlPollInterval) clearInterval(urlPollInterval);
+            if (completionPollInterval) clearInterval(completionPollInterval);
+            if (observer) observer.disconnect();
+            window.removeEventListener("popstate", evaluate);
+            window.removeEventListener("hashchange", evaluate);
+        };
+
+        const finish = (ok: boolean) => {
+            cleanup();
+            resolve(ok);
+        };
+
+        function evaluate() {
+            const responseNow = isResponseUrl();
+            if (responseNow && responseDetectedAt == null) responseDetectedAt = Date.now();
+
+            const completionMessage = hasCompletionMessage();
+            const anotherResponse = hasAnotherResponseSignal();
+            const nextVisible = hasNextButtonVisible();
+            const submitVisible = hasSubmitButtonVisible();
+            const validationError = hasValidationError();
+
+            if (nextVisible || validationError) return;
+
+            if (isStrongCompletionSignal()) {
+                finish(true);
+                return;
+            }
+
+            if (!responseNow) return;
+
+            let positiveScore = 0;
+            positiveScore += 1;
+            if (completionMessage) positiveScore += 2;
+            if (anotherResponse) positiveScore += 2;
+            if (!submitVisible) positiveScore += 1;
+
+            if (positiveScore >= 3) {
+                finish(true);
+                return;
+            }
+
+            if (responseNow && responseDetectedAt != null) {
+                if (Date.now() - responseDetectedAt >= urlFallbackDelayMs && !submitVisible) {
+                    finish(true);
+                }
+            }
+        }
+
+        timeout = setTimeout(() => finish(false), timeoutMs);
+
+        window.addEventListener("popstate", evaluate);
+        window.addEventListener("hashchange", evaluate);
+
+        urlPollInterval = setInterval(() => {
+            try {
+                evaluate();
+            } catch {}
+        }, 250);
+
+        completionPollInterval = setInterval(() => {
+            try {
+                evaluate();
+            } catch {}
+        }, 150);
+
+        const target = document.body || document.documentElement;
+        if (target) {
+            observer = new MutationObserver(() => {
+                try {
+                    evaluate();
+                } catch {}
+            });
+            observer.observe(target, { childList: true, subtree: true, characterData: true });
+        }
+
+        evaluate();
+    });
+};
+
 const submitForm = async (autoSubmit = false): Promise<boolean> => {
     if (!autoSubmit) return false;
 
@@ -222,43 +395,9 @@ const submitForm = async (autoSubmit = false): Promise<boolean> => {
     submitBtn.click();
     submitBtn.classList.add("auto-submitted");
 
-    const initialHref = location.href;
-
-    const waitForCompletion = new Promise<void>((resolve, reject) => {
-        let timeout: any = null;
-        let urlPollInterval: any = null;
-
-        const cleanup = () => {
-            if (timeout) clearTimeout(timeout);
-            if (urlPollInterval) clearInterval(urlPollInterval);
-            window.removeEventListener("popstate", onUrlChange);
-            window.removeEventListener("hashchange", onUrlChange);
-        };
-
-        const onUrlChange = () => {
-            if (location.href !== initialHref) {
-                cleanup();
-                console.log("URL changed detected:", location.href);
-                resolve();
-            }
-        };
-
-        timeout = setTimeout(() => {
-            cleanup();
-            reject(new Error("Timeout waiting for submission (30s)"));
-        }, 30000);
-
-        window.addEventListener("popstate", onUrlChange);
-        window.addEventListener("hashchange", onUrlChange);
-        urlPollInterval = setInterval(() => {
-            try {
-                onUrlChange();
-            } catch {}
-        }, 250);
-    });
-
     try {
-        await waitForCompletion;
+        const completionOk = await waitForCompletionSignal(30000, 1500);
+        if (!completionOk) throw new Error("Timeout waiting for completion signal");
         await new Promise((r) => setTimeout(r, 100));
         return await triggerClose();
     } catch (e) {
@@ -317,6 +456,12 @@ async function armClose() {
     } catch {}
 }
 
+async function permitClose() {
+    try {
+        await browser.runtime.sendMessage({ action: "permit_close", tabId: __cachedTabId, url: location.href });
+    } catch {}
+}
+
 async function closeTabWithRetry(maxAttempts = 3) {
     await ensureTabId();
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -344,6 +489,7 @@ async function triggerClose(): Promise<boolean> {
     if (__closeTriggered) return true;
     __closeTriggered = true;
     try {
+        await permitClose();
         const res: any = await browser.runtime.sendMessage({
             action: "close_window",
             tabId: __cachedTabId,
@@ -360,8 +506,8 @@ async function triggerClose(): Promise<boolean> {
 function setupUrlCloseWatcher() {
     if (__urlWatcherActive) return;
     __urlWatcherActive = true;
-    const startHref = location.href;
     let urlPollInterval: any = null;
+    let closeFlowStarted = false;
 
     const cleanup = () => {
         if (urlPollInterval) clearInterval(urlPollInterval);
@@ -369,19 +515,31 @@ function setupUrlCloseWatcher() {
         window.removeEventListener("hashchange", onUrlChange);
     };
 
-    const onUrlChange = () => {
+    const maybeStartCloseFlow = () => {
         if (__closeTriggered) return;
-        if (location.href === startHref) return;
-        if (location.href.indexOf("formResponse") === -1) return;
-        cleanup();
-        triggerClose();
+        if (!isResponseUrl() && !isStrongCompletionSignal()) return;
+        if (closeFlowStarted) return;
+        closeFlowStarted = true;
+        (async () => {
+            const completionOk = await waitForCompletionSignal(12000, 1800);
+            if (!completionOk) {
+                closeFlowStarted = false;
+                return;
+            }
+            cleanup();
+            await triggerClose();
+        })();
+    };
+
+    const onUrlChange = () => {
+        maybeStartCloseFlow();
     };
 
     window.addEventListener("popstate", onUrlChange);
     window.addEventListener("hashchange", onUrlChange);
     urlPollInterval = setInterval(() => {
         try {
-            onUrlChange();
+            maybeStartCloseFlow();
         } catch {}
     }, 250);
 }

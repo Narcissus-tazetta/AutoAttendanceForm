@@ -49,7 +49,7 @@ export default defineConfig({
                 browser_specific_settings: {
                     gecko: { id: "auto-attendance-form@narcissus-tazetta.github.io" },
                 },
-                version: "1.0.6",
+                version: common.version,
             });
         }
         return mergeManifests(common, {
@@ -57,6 +57,7 @@ export default defineConfig({
             permissions: ["activeTab", "scripting", "storage", "tabs"],
             host_permissions: ["https://docs.google.com/forms/*"],
             action: { default_popup: "popup.html" },
+            version: common.version,
         });
     },
 });

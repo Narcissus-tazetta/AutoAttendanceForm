@@ -1,6 +1,6 @@
 {
     "name": "自動出席フォーム",
-    "version": "1.0.5",
+    "version": "1.0.9",
     "description": "Googleフォームの出席フォームを自動で入力・送信する拡張機能",
     "permissions": ["storage", "tabs"],
     "icons": {
